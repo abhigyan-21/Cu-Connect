@@ -3,7 +3,18 @@
 import { useState, useEffect, useCallback, useReducer } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "./use-toast";
-import { db } from "@/lib/firebase";
+import { useFirestore } from "@/firebase";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  addDoc,
+  deleteDoc,
+  setDoc,
+  getDoc,
+  getDocs,
+  writeBatch,
+} from "firebase/firestore";
 
 // In a real app, you'd use a more robust WebRTC library or a fully implemented service.
 // These are placeholder types and functions for demonstration.
@@ -83,6 +94,7 @@ export function useMilan(roomId: string) {
   const [state, dispatch] = useReducer(milanReducer, initialState);
   const router = useRouter();
   const { toast } = useToast();
+  const firestore = useFirestore();
 
   const getDevices = useCallback(async () => {
     try {
@@ -126,12 +138,12 @@ export function useMilan(roomId: string) {
     // For now, this is a placeholder.
     console.log("Initializing signaling for room:", roomId);
   }, [roomId]);
-  
+
   useEffect(() => {
-    if (state.localStream && db) {
+    if (state.localStream && firestore) {
       initSignaling();
     }
-  }, [state.localStream, initSignaling]);
+  }, [state.localStream, initSignaling, firestore]);
 
 
   const toggleAudio = useCallback(() => {
