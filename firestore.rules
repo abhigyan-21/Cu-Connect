@@ -1,0 +1,98 @@
+/**
+ * @file Firestore Security Rules for the Milan application.
+ *
+ * @core_philosophy This ruleset enforces a strict user-ownership model for rooms and participants,
+ * ensuring that only the owner of a room and the participant themselves can manage their data.
+ * User profiles are private and accessible only to the user themselves.
+ *
+ * @data_structure
+ *   - /users/{userId}: Stores user profiles (email, displayName).
+ *   - /users/{userId}/rooms/{roomId}: Stores room data (roomId, createdAt, ownerId).
+ *   - /users/{userId}/rooms/{roomId}/participants/{participantId}: Stores participant data (joinedAt, isMuted, hasCamera).
+ *
+ * @key_security_decisions
+ *   - User listing is disallowed to protect user privacy.
+ *   - All write operations require authentication.
+ *   - Data validation is relaxed in the prototyping phase, focusing on authorization.
+ *   - The 'ownerId' field in Room documents is crucial for simplifying authorization checks.
+ *
+ * @denormalization_for_authorization The `Room` document includes an `ownerId` field, denormalizing the user ID for simplified authorization checks without needing to perform extra `get()` operations.
+ *
+ * @structural_segregation User data, room data, and participant data are stored in separate collections, simplifying security rules and improving maintainability.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Controls access to user profile data.
+     * @path /users/{userId}
+     * @allow (get, create, update, delete) - Authenticated user with matching userId.
+     * @deny (get, create, update, delete) - Any other user.
+     * @principle Enforces document ownership for writes. Restricts access to a user's own data tree.
+     */
+    match /users/{userId} {
+      // Only signed-in users can access user documents.
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if false; // User listing is not allowed.
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if isSignedIn() && isExistingOwner(userId);
+    }
+
+    /**
+     * @description Controls access to conference room data owned by a specific user.
+     * @path /users/{userId}/rooms/{roomId}
+     * @allow (get, list) - Authenticated user who owns the room.
+     * @allow (create) - Authenticated user creating a room with correct ownerId.
+     * @allow (update, delete) - Authenticated user who owns the room (verifies existence).
+     * @deny (create, update, delete) - Any other user.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/rooms/{roomId} {
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if isSignedIn() && isExistingOwner(userId);
+    }
+
+    /**
+     * @description Controls access to participant data for a specific conference room.
+     * @path /users/{userId}/rooms/{roomId}/participants/{participantId}
+     * @allow (get, list) - Authenticated user who owns the room or is the participant.
+     * @allow (create) - Authenticated user (the participant) creating their own participant document.
+     * @allow (update, delete) - Authenticated user who owns the room or is the participant (verifies existence).
+     * @deny (create, update, delete) - Any other user.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/rooms/{roomId}/participants/{participantId} {
+      allow get: if isSignedIn() && (isOwner(userId) || isParticipant(participantId));
+      allow list: if isSignedIn() && (isOwner(userId) || isParticipant(participantId));
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && isExistingOwner(userId) || (isSignedIn() && isExistingParticipant(participantId));
+      allow delete: if isSignedIn() && isExistingOwner(userId) || (isSignedIn() && isExistingParticipant(participantId));
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isParticipant(participantId) {
+        return request.auth.uid == participantId;
+    }
+
+    function isExistingOwner(userId) {
+      return isSignedIn() && isOwner(userId) && resource != null;
+    }
+
+    function isExistingParticipant(participantId) {
+        return isSignedIn() && isParticipant(participantId) && resource != null;
+    }
+  }
+}

@@ -1,0 +1,173 @@
+{
+  "entities": {
+    "Room": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Room",
+      "type": "object",
+      "description": "Represents a conference room within the Milan application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Room entity."
+        },
+        "roomId": {
+          "type": "string",
+          "description": "The unique ID that users use to join the conference room."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The date and time the room was created.",
+          "format": "date-time"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Reference to the User who created the room. (Relationship: User 1:N Room)"
+        }
+      },
+      "required": [
+        "id",
+        "roomId",
+        "createdAt",
+        "ownerId"
+      ]
+    },
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the Milan application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "The user's email address.",
+          "format": "email"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "The user's display name."
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "displayName"
+      ]
+    },
+    "Participant": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Participant",
+      "type": "object",
+      "description": "Represents a participant in a conference room.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Participant entity."
+        },
+        "roomId": {
+          "type": "string",
+          "description": "Reference to the Room the participant is in. (Relationship: Room 1:N Participant)"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who is participating. (Relationship: User 1:N Participant)"
+        },
+        "joinedAt": {
+          "type": "string",
+          "description": "The date and time the participant joined the room.",
+          "format": "date-time"
+        },
+        "isMuted": {
+          "type": "boolean",
+          "description": "Indicates whether the participant is muted."
+        },
+        "hasCamera": {
+          "type": "boolean",
+          "description": "Indicates whether the participant's camera is enabled."
+        }
+      },
+      "required": [
+        "id",
+        "roomId",
+        "userId",
+        "joinedAt",
+        "isMuted",
+        "hasCamera"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles.  Accessible only to the user themselves (private data).",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/rooms/{roomId}",
+        "definition": {
+          "entityName": "Room",
+          "schema": {
+            "$ref": "#/backend/entities/Room"
+          },
+          "description": "Stores conference room data owned by a specific user. Includes denormalized 'ownerId' field for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user who owns the room."
+            },
+            {
+              "name": "roomId",
+              "description": "The unique ID of the conference room."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/rooms/{roomId}/participants/{participantId}",
+        "definition": {
+          "entityName": "Participant",
+          "schema": {
+            "$ref": "#/backend/entities/Participant"
+          },
+          "description": "Stores participant data for a specific conference room.  Accessible to the room owner and the participant themselves.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user who owns the room."
+            },
+            {
+              "name": "roomId",
+              "description": "The unique ID of the conference room."
+            },
+            {
+              "name": "participantId",
+              "description": "The unique ID of the participant."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to support the Milan application's core features: room creation/joining, real-time audio/video conferencing, and signaling. It prioritizes authorization independence, clarity, and security. The structure uses path-based ownership for user-created rooms and denormalization to avoid complex `get()` calls in security rules.\n\n**Authorization Independence:** The `Room` documents are stored under the `/users/{userId}/rooms/{roomId}` path, which explicitly associates each room with its owner. The `ownerId` field within the `Room` document is redundant but crucial. It enables atomic creation of rooms and simplifies ownership checks in security rules, eliminating the need to fetch the parent user document.\n\n**QAPs (Rules are not Filters):**  The structure facilitates secure list operations. Listing rooms is limited to the owner via `/users/{userId}/rooms`, preventing unauthorized access to other users' rooms. Participants are managed in a subcollection `/users/{userId}/rooms/{roomId}/participants/{participantId}`, enabling secure listing of participants within a room.\n\n**Structural Segregation:** Each collection serves a specific purpose and has a homogeneous security posture. User data is separated from room data, which is further separated from participant data. This segregation simplifies security rules and enhances debuggability.\n\n**Invariants:** The structure supports data integrity. Ownership of rooms is explicitly defined by the path and the `ownerId` field. Timestamps (`createdAt`, `joinedAt`) provide immutable records of events.\n\n**Error Analysis and Fix:** The original error message indicates an `auth/invalid-api-key` error in `src/lib/firebase.ts`. This suggests a misconfiguration of the Firebase API key within the application's Firebase initialization. The Firestore structure itself is unrelated to this specific error, which requires fixing the environment variables/API key configuration."
+  }
+}
