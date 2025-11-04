@@ -62,7 +62,7 @@ export default function Home() {
               </div>
               <Button
                 type="submit"
-                className="w-full font-bold text-lg h-12"
+                className="w-full font-bold text-lg h-12 transition-all duration-300 hover:shadow-lg hover:shadow-primary/40"
                 disabled={!roomId.trim()}
               >
                 Join Room
