@@ -11,7 +11,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Milan - Video Conferencing",
+  title: "CU MILAP",
   description: "Real-time audio and video conferencing app.",
 };
 
@@ -21,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body
         className={`${inter.variable} ${spaceGrotesk.variable} font-body antialiased`}
       >
