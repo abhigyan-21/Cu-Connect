@@ -34,9 +34,8 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
-      <div className="absolute top-8 left-8 flex items-center gap-2 text-2xl font-bold text-primary font-headline">
-        <Video className="h-8 w-8 text-accent" />
-        Milan
+      <div className="absolute top-8 left-8 flex items-center gap-2 text-2xl font-bold text-destructive font-headline">
+        CU-Connect
       </div>
       <Card className="w-full max-w-md shadow-2xl">
         <CardHeader className="text-center">

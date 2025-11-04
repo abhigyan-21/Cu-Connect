@@ -11,7 +11,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "CU MILAP",
+  title: "CU-Connect",
   description: "Real-time audio and video conferencing app.",
 };
 
