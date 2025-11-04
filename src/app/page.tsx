@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,7 +14,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Video } from "lucide-react";
 import { generateRoomId } from "@/lib/utils";
 
 export default function Home() {
@@ -35,6 +35,7 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
       <div className="absolute top-8 left-8 flex items-center gap-2 text-2xl font-bold text-primary font-headline">
+        <Image src="/cu-logo.png" alt="CU-Connect Logo" width={40} height={40} />
         CU-Connect
       </div>
       <Card className="w-full max-w-md shadow-2xl">
