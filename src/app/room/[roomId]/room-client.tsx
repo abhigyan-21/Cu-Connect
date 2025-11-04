@@ -3,7 +3,6 @@
 import { useMilan } from "@/hooks/use-milan";
 import { VideoPlayer } from "@/components/video-player";
 import { RoomControls } from "@/components/room-controls";
-import Image from "next/image";
 
 export default function RoomClient({ roomId }: { roomId: string }) {
   const { state, actions } = useMilan(roomId);
@@ -14,7 +13,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     <div className="flex h-screen w-full flex-col bg-background relative">
        <header className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-10">
         <div className="flex items-center gap-2 text-xl font-bold text-primary font-headline">
-          <Image src="/cu-logo.png" alt="CU-Connect Logo" width={32} height={32} />
           CU-Connect
         </div>
         <div className="text-sm bg-card/80 backdrop-blur-md px-3 py-1.5 rounded-md">
