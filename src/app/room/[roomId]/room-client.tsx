@@ -24,7 +24,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         {state.localStream && (
           <VideoPlayer
             stream={state.localStream}
-            name="You"
+            name={state.isScreenSharing ? "Your Screen" : "You"}
             isMuted
           />
         )}
@@ -43,6 +43,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             state={state}
             onToggleAudio={actions.toggleAudio}
             onToggleVideo={actions.toggleVideo}
+            onToggleScreenShare={actions.toggleScreenShare}
             onLeave={actions.leaveRoom}
             onSelectDevice={actions.selectDevice}
           />

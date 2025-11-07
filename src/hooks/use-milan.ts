@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useReducer } from "react";
+import { useState, useEffect, useCallback, useReducer, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "./use-toast";
 import { useFirestore } from "@/firebase";
@@ -36,6 +36,7 @@ export interface MilanState {
   remotePeers: Record<string, RemotePeer>;
   isAudioEnabled: boolean;
   isVideoEnabled: boolean;
+  isScreenSharing: boolean;
   devices: MediaDeviceState;
 }
 
@@ -46,6 +47,7 @@ type MilanAction =
   | { type: "SET_REMOTE_STREAM"; peerId: string; stream: MediaStream }
   | { type: "SET_AUDIO_ENABLED"; enabled: boolean }
   | { type: "SET_VIDEO_ENABLED"; enabled: boolean }
+  | { type: "SET_SCREEN_SHARING"; enabled: boolean }
   | { type: "SET_DEVICES"; devices: MediaDeviceState }
   | { type: "RESET_STATE" };
 
@@ -54,6 +56,7 @@ const initialState: MilanState = {
   remotePeers: {},
   isAudioEnabled: true,
   isVideoEnabled: true,
+  isScreenSharing: false,
   devices: { audioInputs: [], videoInputs: [], audioOutputs: [] },
 };
 
@@ -81,6 +84,8 @@ function milanReducer(state: MilanState, action: MilanAction): MilanState {
       return { ...state, isAudioEnabled: action.enabled };
     case "SET_VIDEO_ENABLED":
       return { ...state, isVideoEnabled: action.enabled };
+    case "SET_SCREEN_SHARING":
+      return { ...state, isScreenSharing: action.enabled };
     case "SET_DEVICES":
       return { ...state, devices: action.devices };
     case "RESET_STATE":
@@ -95,6 +100,7 @@ export function useMilan(roomId: string) {
   const router = useRouter();
   const { toast } = useToast();
   const firestore = useFirestore();
+  const cameraStreamRef = useRef<MediaStream | null>(null);
 
   const getDevices = useCallback(async () => {
     try {
@@ -114,6 +120,7 @@ export function useMilan(roomId: string) {
       const stream = await navigator.mediaDevices.getUserMedia(
         constraints || { video: true, audio: true }
       );
+      cameraStreamRef.current = stream;
       dispatch({ type: "SET_LOCAL_STREAM", stream });
       await getDevices();
     } catch (error) {
@@ -127,6 +134,7 @@ export function useMilan(roomId: string) {
     getMedia();
     return () => {
         state.localStream?.getTracks().forEach(track => track.stop());
+        cameraStreamRef.current?.getTracks().forEach(track => track.stop());
         dispatch({ type: 'RESET_STATE' });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -145,6 +153,58 @@ export function useMilan(roomId: string) {
     }
   }, [state.localStream, initSignaling, firestore]);
 
+  const replaceTrack = (track: MediaStreamTrack) => {
+    if (state.localStream) {
+      const senders = Object.values(state.remotePeers).flatMap(
+        (peer) => peer.connection.getSenders().filter(s => s.track?.kind === 'video')
+      );
+      senders.forEach(sender => sender.replaceTrack(track));
+
+      const newStream = new MediaStream([track, ...state.localStream.getAudioTracks()]);
+      dispatch({ type: 'SET_LOCAL_STREAM', stream: newStream });
+    }
+  }
+
+  const toggleScreenShare = useCallback(async () => {
+    if (state.isScreenSharing) {
+      // Stop screen share and revert to camera
+      state.localStream?.getTracks().forEach(track => track.stop());
+      if (cameraStreamRef.current) {
+        const videoTrack = cameraStreamRef.current.getVideoTracks()[0];
+        replaceTrack(videoTrack);
+        dispatch({ type: 'SET_VIDEO_ENABLED', enabled: true });
+      } else {
+        // Fallback if camera stream is lost
+        await getMedia({ video: true, audio: true });
+      }
+      dispatch({ type: "SET_SCREEN_SHARING", enabled: false });
+      return;
+    }
+
+    // Start screen share
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const screenTrack = screenStream.getVideoTracks()[0];
+      
+      // When user stops sharing via browser UI
+      screenTrack.onended = () => {
+        if(cameraStreamRef.current){
+          const videoTrack = cameraStreamRef.current.getVideoTracks()[0];
+          replaceTrack(videoTrack);
+          dispatch({ type: "SET_SCREEN_SHARING", enabled: false });
+          dispatch({ type: 'SET_VIDEO_ENABLED', enabled: true });
+        }
+      };
+
+      replaceTrack(screenTrack);
+      dispatch({ type: "SET_SCREEN_SHARING", enabled: true });
+      dispatch({ type: 'SET_VIDEO_ENABLED', enabled: false }); // Disable video toggle
+    } catch (error) {
+      console.error("Error starting screen share:", error);
+      toast({ title: "Screen Share Failed", description: "Could not start screen sharing.", variant: "destructive" });
+    }
+  }, [state.isScreenSharing, state.localStream, getMedia, toast]);
+
 
   const toggleAudio = useCallback(() => {
     if (state.localStream) {
@@ -157,6 +217,7 @@ export function useMilan(roomId: string) {
   }, [state.localStream, state.isAudioEnabled]);
 
   const toggleVideo = useCallback(() => {
+    if (state.isScreenSharing) return;
     if (state.localStream) {
       const videoTracks = state.localStream.getVideoTracks();
       videoTracks.forEach((track) => {
@@ -164,20 +225,25 @@ export function useMilan(roomId: string) {
       });
       dispatch({ type: "SET_VIDEO_ENABLED", enabled: !state.isVideoEnabled });
     }
-  }, [state.localStream, state.isVideoEnabled]);
+  }, [state.localStream, state.isVideoEnabled, state.isScreenSharing]);
 
   const changeDevice = useCallback(async (kind: MediaDeviceKind, deviceId: string) => {
+    if (state.isScreenSharing) {
+        toast({ title: "Cannot change device", description: "Please stop screen sharing before changing devices.", variant: "destructive" });
+        return;
+    }
     const constraints = kind === 'audioinput' 
-        ? { audio: { deviceId: { exact: deviceId } } }
-        : { video: { deviceId: { exact: deviceId } } };
+        ? { audio: { deviceId: { exact: deviceId } }, video: true }
+        : { audio: true, video: { deviceId: { exact: deviceId } } };
     
     state.localStream?.getTracks().forEach(track => track.stop());
     await getMedia(constraints as MediaStreamConstraints);
     toast({ title: "Device changed", description: "Your media device has been updated." });
-  }, [state.localStream, getMedia, toast]);
+  }, [state.localStream, getMedia, toast, state.isScreenSharing]);
 
   const leaveRoom = useCallback(() => {
     state.localStream?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current?.getTracks().forEach(track => track.stop());
     Object.values(state.remotePeers).forEach((peer) => peer.connection.close());
     dispatch({ type: "RESET_STATE" });
     router.push("/");
@@ -188,6 +254,7 @@ export function useMilan(roomId: string) {
     actions: {
       toggleAudio,
       toggleVideo,
+      toggleScreenShare,
       leaveRoom,
       selectDevice: changeDevice,
     },

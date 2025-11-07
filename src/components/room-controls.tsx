@@ -4,6 +4,8 @@ import {
   Mic,
   MicOff,
   PhoneOff,
+  ScreenShare,
+  ScreenShareOff,
   Settings,
   Video,
   VideoOff,
@@ -28,6 +30,7 @@ type RoomControlsProps = {
   state: MilanState;
   onToggleAudio: () => void;
   onToggleVideo: () => void;
+  onToggleScreenShare: () => void;
   onLeave: () => void;
   onSelectDevice: (kind: MediaDeviceKind, deviceId: string) => void;
 };
@@ -36,6 +39,7 @@ export function RoomControls({
   state,
   onToggleAudio,
   onToggleVideo,
+  onToggleScreenShare,
   onLeave,
   onSelectDevice,
 }: RoomControlsProps) {
@@ -61,6 +65,7 @@ export function RoomControls({
         size="lg"
         onClick={onToggleVideo}
         className="rounded-full w-16 h-16"
+        disabled={state.isScreenSharing}
       >
         {state.isVideoEnabled ? (
           <Video className="h-6 w-6" />
@@ -69,6 +74,22 @@ export function RoomControls({
         )}
         <span className="sr-only">
           {state.isVideoEnabled ? "Turn off camera" : "Turn on camera"}
+        </span>
+      </Button>
+
+      <Button
+        variant={state.isScreenSharing ? "default" : "secondary"}
+        size="lg"
+        onClick={onToggleScreenShare}
+        className="rounded-full w-16 h-16"
+      >
+        {state.isScreenSharing ? (
+          <ScreenShareOff className="h-6 w-6" />
+        ) : (
+          <ScreenShare className="h-6 w-6" />
+        )}
+        <span className="sr-only">
+          {state.isScreenSharing ? "Stop sharing" : "Start sharing"}
         </span>
       </Button>
 
@@ -113,6 +134,7 @@ export function RoomControls({
                   onValueChange={(value) =>
                     onSelectDevice("videoinput", value)
                   }
+                  disabled={state.isScreenSharing}
                 >
                   <SelectTrigger id="video-input" className="col-span-2 h-8">
                     <SelectValue placeholder="Select camera" />
