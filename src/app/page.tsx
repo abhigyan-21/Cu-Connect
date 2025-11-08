@@ -53,7 +53,15 @@ export default function Home() {
       )}
 
       <div className="flex flex-col items-center justify-center w-full max-w-5xl flex-1 px-4 sm:px-6 lg:px-8">
-        <Card className="w-full max-w-md shadow-2xl mt-20">
+        
+        {/* Important Notice */}
+        <div className="w-full max-w-md mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <p className="text-sm text-yellow-800">
+            <strong>⚠️ Note:</strong> This is a demo version. To enable multi-user video calls, you need to add a signaling server (like Socket.io or PeerJS). Currently, only your local video stream is shown.
+          </p>
+        </div>
+
+        <Card className="w-full max-w-md shadow-2xl">
           <CardHeader className="text-center">
             <CardTitle className="text-3xl font-headline">
               Video Conferencing, Simplified

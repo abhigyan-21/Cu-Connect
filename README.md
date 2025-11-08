@@ -2,6 +2,17 @@
 
 A real-time video conferencing application built with Next.js and WebRTC.
 
+## ⚠️ Important: Multi-User Setup Required
+
+**Current Status:** The app is deployed but users cannot see each other yet. You need to add a **signaling server** for WebRTC to work between different users.
+
+**See `WEBRTC_SETUP.md` for detailed instructions on enabling multi-user video calls.**
+
+Quick options:
+- **PeerJS** (Easiest - 30 min) - Free signaling server
+- **Socket.io** (More control - 1-2 hours) - Your own server
+- **Daily.co/Agora** (Fastest - 15 min) - Managed service
+
 ## Features
 
 - 🎥 HD Video & Audio - Crystal-clear video quality
