@@ -30,10 +30,41 @@ export default function Home() {
     }
   };
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async () => {
     setIsLoading(true);
     const newRoomId = generateRoomId();
-    router.push(`/room/${newRoomId}`);
+    
+    try {
+      // Create the room on the server first
+      const response = await fetch('/api/rooms/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId: newRoomId }),
+      });
+      
+      if (response.ok) {
+        router.push(`/room/${newRoomId}`);
+      } else {
+        // If room creation fails, try with a different ID
+        const retryRoomId = generateRoomId();
+        const retryResponse = await fetch('/api/rooms/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomId: retryRoomId }),
+        });
+        
+        if (retryResponse.ok) {
+          router.push(`/room/${retryRoomId}`);
+        } else {
+          setIsLoading(false);
+          alert('Failed to create room. Please try again.');
+        }
+      }
+    } catch (error) {
+      console.error('Error creating room:', error);
+      setIsLoading(false);
+      alert('Failed to create room. Please try again.');
+    }
   };
 
   return (

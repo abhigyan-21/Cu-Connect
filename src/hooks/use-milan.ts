@@ -291,6 +291,10 @@ export function useMilan(roomId: string) {
       });
       
       if (!response.ok) {
+        const errorData = await response.json();
+        if (response.status === 404 || errorData.code === 'ROOM_NOT_FOUND') {
+          throw new Error('404: Room not found');
+        }
         throw new Error('Failed to join room');
       }
       
@@ -342,16 +346,31 @@ export function useMilan(roomId: string) {
         }).catch(console.error);
       };
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error registering with room:', error);
-      toast({
-        title: "Connection Error",
-        description: "Could not connect to room service. Using fallback mode.",
-        variant: "destructive",
-      });
       
-      // Fallback: use localStorage for same-device testing
-      useFallbackMode(peer, roomId, myPeerId);
+      // Check if room doesn't exist
+      if (error.message?.includes('404') || error.message?.includes('ROOM_NOT_FOUND')) {
+        toast({
+          title: "Room Not Found",
+          description: "This room doesn't exist. Please check the room ID or create a new room.",
+          variant: "destructive",
+        });
+        
+        // Redirect back to home after 2 seconds
+        setTimeout(() => {
+          router.push('/');
+        }, 2000);
+      } else {
+        toast({
+          title: "Connection Error",
+          description: "Could not connect to room service. Using fallback mode.",
+          variant: "destructive",
+        });
+        
+        // Fallback: use localStorage for same-device testing
+        useFallbackMode(peer, roomId, myPeerId);
+      }
     }
   };
   

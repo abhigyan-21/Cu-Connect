@@ -12,9 +12,12 @@ export async function POST(request: Request) {
       );
     }
     
-    // Get or create room
+    // Check if room exists
     if (!rooms.has(roomId)) {
-      rooms.set(roomId, new Set());
+      return NextResponse.json(
+        { error: 'Room does not exist', code: 'ROOM_NOT_FOUND' },
+        { status: 404 }
+      );
     }
     
     const room = rooms.get(roomId)!;
