@@ -140,22 +140,33 @@ export function useMilan(roomId: string) {
       port: 443,
       path: '/',
       secure: true,
+      debug: 2, // Enable debug logging
       config: {
         iceServers: [
-          // Google STUN servers
+          // Multiple STUN servers for redundancy
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
           { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' },
-          // Metered TURN servers (free tier)
+          { urls: 'stun:global.stun.twilio.com:3478' },
+          // Twilio TURN (free for testing)
           {
-            urls: 'turn:a.relay.metered.ca:80',
-            username: 'e46a735f4c26d71c3e6e9f1f',
-            credential: 'tEgvhMDLK8F8BCAK',
+            urls: 'turn:global.turn.twilio.com:3478?transport=udp',
+            username: 'f4b4035eaa76f4a55de5f4351567653ee4ff6fa97b50b6b334fcc1be9c27212d',
+            credential: 'w1uxM55V9yVoqyVFjt+mxDBV0F87AUCemaYVQGxsPLw=',
           },
           {
-            urls: 'turn:a.relay.metered.ca:80?transport=tcp',
+            urls: 'turn:global.turn.twilio.com:3478?transport=tcp',
+            username: 'f4b4035eaa76f4a55de5f4351567653ee4ff6fa97b50b6b334fcc1be9c27212d',
+            credential: 'w1uxM55V9yVoqyVFjt+mxDBV0F87AUCemaYVQGxsPLw=',
+          },
+          {
+            urls: 'turn:global.turn.twilio.com:443?transport=tcp',
+            username: 'f4b4035eaa76f4a55de5f4351567653ee4ff6fa97b50b6b334fcc1be9c27212d',
+            credential: 'w1uxM55V9yVoqyVFjt+mxDBV0F87AUCemaYVQGxsPLw=',
+          },
+          // Metered TURN servers as backup
+          {
+            urls: 'turn:a.relay.metered.ca:80',
             username: 'e46a735f4c26d71c3e6e9f1f',
             credential: 'tEgvhMDLK8F8BCAK',
           },
@@ -164,14 +175,11 @@ export function useMilan(roomId: string) {
             username: 'e46a735f4c26d71c3e6e9f1f',
             credential: 'tEgvhMDLK8F8BCAK',
           },
-          {
-            urls: 'turns:a.relay.metered.ca:443?transport=tcp',
-            username: 'e46a735f4c26d71c3e6e9f1f',
-            credential: 'tEgvhMDLK8F8BCAK',
-          },
         ],
         iceTransportPolicy: 'all',
-        iceCandidatePoolSize: 10, // Pre-gather candidates
+        iceCandidatePoolSize: 10,
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require',
       },
     });
 
@@ -367,15 +375,23 @@ export function useMilan(roomId: string) {
       });
     });
     
-    // Monitor connection state
+    // Monitor connection state with restart capability
     call.peerConnection.oniceconnectionstatechange = () => {
       const state = call.peerConnection.iceConnectionState;
       console.log(`ICE connection state with ${remotePeerId}:`, state);
       
-      if (state === 'failed' || state === 'disconnected') {
-        console.error('ICE connection failed/disconnected');
+      if (state === 'failed') {
+        console.error('ICE connection failed, attempting restart...');
+        call.peerConnection.restartIce();
       } else if (state === 'connected' || state === 'completed') {
-        console.log('ICE connection established successfully');
+        console.log('✅ ICE connection established successfully!');
+      }
+    };
+    
+    // Log ICE candidates
+    call.peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log('ICE candidate:', event.candidate.type, event.candidate.protocol);
       }
     };
   };
