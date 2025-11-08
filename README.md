@@ -41,16 +41,6 @@ npm install -g vercel
 vercel
 ```
 
-#### Deploy to Netlify
-
-1. Push your code to GitHub
-2. Go to [netlify.com](https://netlify.com)
-3. Click "Add new site" → "Import an existing project"
-4. Connect your GitHub repository
-5. Build command: `npm run build`
-6. Publish directory: `.next`
-7. Click "Deploy"
-
 ## Tech Stack
 
 - Next.js 15 with Turbopack
