@@ -417,7 +417,7 @@ export function useMilan(roomId: string) {
       // Poll for new peers every 3 seconds
       const pollInterval = setInterval(async () => {
         try {
-          const pollResponse = await fetch(`${ROOM_API}/peers/${roomId}`);
+          const pollResponse = await fetch(`${ROOM_API}/${roomId}`);
           if (pollResponse.ok) {
             const pollData = await pollResponse.json();
             pollData.peers.forEach((peerId: string) => {

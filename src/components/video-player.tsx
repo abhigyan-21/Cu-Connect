@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { User } from "lucide-react";
 
@@ -12,12 +12,60 @@ interface VideoPlayerProps {
 
 export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [hasVideo, setHasVideo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
+    const video = videoRef.current;
+    if (!video || !stream) {
+      console.error('VideoPlayer: Missing video element or stream');
+      setError('No stream available');
+      return;
     }
-  }, [stream]);
+
+    console.log(`VideoPlayer for ${name}:`, {
+      streamId: stream.id,
+      tracks: stream.getTracks().map(t => ({
+        kind: t.kind,
+        enabled: t.enabled,
+        readyState: t.readyState,
+        muted: t.muted
+      }))
+    });
+
+    // Set the stream
+    video.srcObject = stream;
+    
+    // Check if video track exists and is enabled
+    const videoTrack = stream.getVideoTracks()[0];
+    setHasVideo(videoTrack && videoTrack.enabled && videoTrack.readyState === 'live');
+
+    // Force play
+    video.play().catch(err => {
+      console.error('Error playing video:', err);
+      setError('Failed to play video');
+    });
+
+    // Listen for track changes
+    const handleTrackEnabled = () => {
+      const vTrack = stream.getVideoTracks()[0];
+      setHasVideo(vTrack && vTrack.enabled && vTrack.readyState === 'live');
+    };
+
+    stream.getTracks().forEach(track => {
+      track.addEventListener('enabled', handleTrackEnabled);
+      track.addEventListener('mute', handleTrackEnabled);
+      track.addEventListener('unmute', handleTrackEnabled);
+    });
+
+    return () => {
+      stream.getTracks().forEach(track => {
+        track.removeEventListener('enabled', handleTrackEnabled);
+        track.removeEventListener('mute', handleTrackEnabled);
+        track.removeEventListener('unmute', handleTrackEnabled);
+      });
+    };
+  }, [stream, name]);
 
   return (
     <Card className="relative aspect-video w-full overflow-hidden bg-muted flex items-center justify-center">
@@ -31,11 +79,18 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
       <div className="absolute bottom-2 left-2 rounded-md bg-black/50 px-2 py-1 text-white text-sm backdrop-blur-sm">
         {name}
       </div>
-      {!stream.getVideoTracks().find((track) => track.enabled) && (
+      {error && (
+        <div className="absolute top-2 left-2 rounded-md bg-red-500/80 px-2 py-1 text-white text-xs">
+          {error}
+        </div>
+      )}
+      {!hasVideo && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white">
           <User className="h-16 w-16" />
           <p className="mt-2 text-lg font-semibold">{name}</p>
-          <p className="text-sm text-muted-foreground">Camera is off</p>
+          <p className="text-sm text-muted-foreground">
+            {stream.getVideoTracks().length === 0 ? 'No video track' : 'Camera is off'}
+          </p>
         </div>
       )}
     </Card>

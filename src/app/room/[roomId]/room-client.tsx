@@ -9,6 +9,19 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
   const remoteStreams = Object.values(state.remotePeers).filter(p => p.stream);
 
+  // Debug logging
+  console.log('RoomClient render:', {
+    localStream: state.localStream?.id,
+    remotePeersCount: Object.keys(state.remotePeers).length,
+    remoteStreamsCount: remoteStreams.length,
+    remotePeers: Object.entries(state.remotePeers).map(([id, peer]) => ({
+      id,
+      hasStream: !!peer.stream,
+      streamId: peer.stream?.id,
+      tracks: peer.stream?.getTracks().map(t => `${t.kind}: ${t.enabled}`)
+    }))
+  });
+
   return (
     <div className="flex h-screen w-full flex-col bg-background relative">
        <header className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-10">
