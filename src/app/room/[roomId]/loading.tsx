@@ -4,8 +4,9 @@ export default function RoomLoading() {
   return (
     <div className="flex h-screen w-full flex-col bg-background relative">
       <header className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-10">
-        <div className="flex items-center gap-2 text-xl font-bold text-primary font-headline">
-          CU-Connect
+        <div className="flex items-center gap-3">
+          <img src="/cu_logo.jpg" alt="CU Logo" className="h-10 w-auto" />
+          <span className="text-xl font-bold text-primary font-headline">CU-Connect</span>
         </div>
         <Skeleton className="h-8 w-32" />
       </header>

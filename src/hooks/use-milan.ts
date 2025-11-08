@@ -1,20 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useReducer, useRef } from "react";
+import { useEffect, useCallback, useReducer, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "./use-toast";
-import { useFirestore } from "@/firebase";
-import {
-  collection,
-  doc,
-  onSnapshot,
-  addDoc,
-  deleteDoc,
-  setDoc,
-  getDoc,
-  getDocs,
-  writeBatch,
-} from "firebase/firestore";
 
 // In a real app, you'd use a more robust WebRTC library or a fully implemented service.
 // These are placeholder types and functions for demonstration.
@@ -99,7 +87,6 @@ export function useMilan(roomId: string) {
   const [state, dispatch] = useReducer(milanReducer, initialState);
   const router = useRouter();
   const { toast } = useToast();
-  const firestore = useFirestore();
   const cameraStreamRef = useRef<MediaStream | null>(null);
 
   const getDevices = useCallback(async () => {
@@ -140,18 +127,10 @@ export function useMilan(roomId: string) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const initSignaling = useCallback(() => {
-    // This is where you would set up Firestore listeners
-    // to exchange SDP offers/answers and ICE candidates.
-    // For now, this is a placeholder.
-    console.log("Initializing signaling for room:", roomId);
-  }, [roomId]);
-
   useEffect(() => {
-    if (state.localStream && firestore) {
-      initSignaling();
-    }
-  }, [state.localStream, initSignaling, firestore]);
+    // Signaling setup would go here when implementing WebRTC
+    console.log("Room initialized:", roomId);
+  }, [roomId]);
 
   const replaceTrack = (track: MediaStreamTrack) => {
     if (state.localStream) {
