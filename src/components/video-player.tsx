@@ -33,18 +33,28 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
       }))
     });
 
-    // Set the stream
-    video.srcObject = stream;
+    // Only set stream if it's different
+    if (video.srcObject !== stream) {
+      video.srcObject = stream;
+    }
     
     // Check if video track exists and is enabled
     const videoTrack = stream.getVideoTracks()[0];
     setHasVideo(videoTrack && videoTrack.enabled && videoTrack.readyState === 'live');
 
-    // Force play
-    video.play().catch(err => {
-      console.error('Error playing video:', err);
-      setError('Failed to play video');
-    });
+    // Wait a bit before trying to play
+    const playTimeout = setTimeout(() => {
+      video.play().catch(err => {
+        console.error('Error playing video:', err);
+        // Try again after a short delay
+        setTimeout(() => {
+          video.play().catch(e => {
+            console.error('Retry failed:', e);
+            setError('Failed to play video');
+          });
+        }, 500);
+      });
+    }, 100);
 
     // Listen for track changes
     const handleTrackEnabled = () => {
@@ -59,6 +69,7 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
     });
 
     return () => {
+      clearTimeout(playTimeout);
       stream.getTracks().forEach(track => {
         track.removeEventListener('enabled', handleTrackEnabled);
         track.removeEventListener('mute', handleTrackEnabled);

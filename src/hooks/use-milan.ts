@@ -148,24 +148,30 @@ export function useMilan(roomId: string) {
           { urls: 'stun:stun2.l.google.com:19302' },
           { urls: 'stun:stun3.l.google.com:19302' },
           { urls: 'stun:stun4.l.google.com:19302' },
-          // Free TURN servers from Open Relay Project
+          // Metered TURN servers (free tier)
           {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject',
+            urls: 'turn:a.relay.metered.ca:80',
+            username: 'e46a735f4c26d71c3e6e9f1f',
+            credential: 'tEgvhMDLK8F8BCAK',
           },
           {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject',
+            urls: 'turn:a.relay.metered.ca:80?transport=tcp',
+            username: 'e46a735f4c26d71c3e6e9f1f',
+            credential: 'tEgvhMDLK8F8BCAK',
           },
           {
-            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-            username: 'openrelayproject',
-            credential: 'openrelayproject',
+            urls: 'turn:a.relay.metered.ca:443',
+            username: 'e46a735f4c26d71c3e6e9f1f',
+            credential: 'tEgvhMDLK8F8BCAK',
+          },
+          {
+            urls: 'turns:a.relay.metered.ca:443?transport=tcp',
+            username: 'e46a735f4c26d71c3e6e9f1f',
+            credential: 'tEgvhMDLK8F8BCAK',
           },
         ],
-        iceTransportPolicy: 'all', // Try all connection methods
+        iceTransportPolicy: 'all',
+        iceCandidatePoolSize: 10, // Pre-gather candidates
       },
     });
 
