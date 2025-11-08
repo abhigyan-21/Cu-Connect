@@ -132,8 +132,10 @@ export function useMilan(roomId: string) {
   useEffect(() => {
     if (!state.localStream) return;
 
-    // Initialize PeerJS with room-based peer ID
-    const peer = new Peer(`${roomId}-${Math.random().toString(36).substr(2, 9)}`, {
+    // Use a deterministic peer ID based on room and random component
+    const myPeerId = `cu-${roomId}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const peer = new Peer(myPeerId, {
       host: '0.peerjs.com',
       port: 443,
       path: '/',
@@ -142,6 +144,7 @@ export function useMilan(roomId: string) {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
         ],
       },
     });
@@ -150,11 +153,11 @@ export function useMilan(roomId: string) {
       console.log('My peer ID:', id);
       toast({ 
         title: "Connected!", 
-        description: "You're now in the room. Share the room ID with others to join.",
+        description: `Room: ${roomId}. Waiting for others to join...`,
       });
 
-      // Broadcast presence to other peers in the room
-      broadcastToRoom(peer, roomId, id);
+      // Try to connect to the room coordinator
+      connectToRoomCoordinator(peer, roomId, id);
     });
 
     peer.on('call', (call) => {
@@ -191,12 +194,33 @@ export function useMilan(roomId: string) {
       });
     });
 
+    // Handle incoming data connections (for signaling)
     peer.on('connection', (conn) => {
+      console.log('Incoming data connection from:', conn.peer);
+      
+      conn.on('open', () => {
+        console.log('Data connection opened with:', conn.peer);
+      });
+      
       conn.on('data', (data: any) => {
-        if (data.type === 'join-room' && data.roomId === roomId) {
-          // New peer joined, call them
-          console.log('New peer joined room:', data.peerId);
-          callPeer(peer, data.peerId, state.localStream!);
+        console.log('Received data:', data);
+        
+        if (data.type === 'peers' && Array.isArray(data.peers)) {
+          // Received peer list from coordinator
+          data.peers.forEach((peerId: string) => {
+            if (peerId !== peer.id && state.localStream && !peersRef.current.has(peerId)) {
+              setTimeout(() => {
+                callPeer(peer, peerId, state.localStream!);
+              }, 500);
+            }
+          });
+        } else if (data.type === 'new-peer' && data.peerId) {
+          // New peer notification
+          if (data.peerId !== peer.id && state.localStream && !peersRef.current.has(data.peerId)) {
+            setTimeout(() => {
+              callPeer(peer, data.peerId, state.localStream!);
+            }, 500);
+          }
         }
       });
     });
@@ -258,53 +282,98 @@ export function useMilan(roomId: string) {
     });
   };
 
-  // Helper function to broadcast presence to room
-  const broadcastToRoom = (peer: Peer, roomId: string, myPeerId: string) => {
-    // In a production app, you'd use a proper room management system
-    // For now, we'll use a simple approach with peer IDs containing the room ID
-    console.log('Broadcasting presence to room:', roomId);
+  // Connect to room coordinator (first peer in room acts as coordinator)
+  const connectToRoomCoordinator = (peer: Peer, roomId: string, myPeerId: string) => {
+    // The coordinator peer ID is deterministic based on room ID
+    const coordinatorId = `cu-${roomId}-coordinator`;
     
-    // Try to connect to potential peers in the room
-    // This is a simplified approach - in production, use a proper signaling server
-    const roomPrefix = `${roomId}-`;
+    // Try to connect to coordinator
+    const conn = peer.connect(coordinatorId);
     
-    // Store our peer ID in localStorage for other tabs/users to discover
-    const roomPeers = JSON.parse(localStorage.getItem(`room-${roomId}`) || '[]');
-    if (!roomPeers.includes(myPeerId)) {
-      roomPeers.push(myPeerId);
-      localStorage.setItem(`room-${roomId}`, JSON.stringify(roomPeers));
-    }
-
-    // Try to connect to existing peers
-    roomPeers.forEach((peerId: string) => {
-      if (peerId !== myPeerId && state.localStream) {
-        setTimeout(() => {
-          callPeer(peer, peerId, state.localStream!);
-        }, 1000);
-      }
+    conn.on('open', () => {
+      console.log('Connected to room coordinator');
+      // Request list of peers in room
+      conn.send({ type: 'join', peerId: myPeerId });
     });
-
-    // Listen for storage changes (other tabs/users joining)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === `room-${roomId}` && e.newValue) {
-        const newPeers = JSON.parse(e.newValue);
-        newPeers.forEach((peerId: string) => {
-          if (peerId !== myPeerId && !peersRef.current.has(peerId) && state.localStream) {
-            callPeer(peer, peerId, state.localStream!);
+    
+    conn.on('data', (data: any) => {
+      if (data.type === 'peers') {
+        // Received list of peers, call them all
+        console.log('Received peer list:', data.peers);
+        data.peers.forEach((peerId: string) => {
+          if (peerId !== myPeerId && state.localStream) {
+            setTimeout(() => {
+              callPeer(peer, peerId, state.localStream!);
+            }, 500);
           }
         });
+      } else if (data.type === 'new-peer') {
+        // New peer joined, call them
+        console.log('New peer joined:', data.peerId);
+        if (data.peerId !== myPeerId && state.localStream) {
+          callPeer(peer, data.peerId, state.localStream!);
+        }
       }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
+    });
     
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      // Clean up our peer ID from localStorage
-      const peers = JSON.parse(localStorage.getItem(`room-${roomId}`) || '[]');
-      const filtered = peers.filter((id: string) => id !== myPeerId);
-      localStorage.setItem(`room-${roomId}`, JSON.stringify(filtered));
-    };
+    conn.on('error', (err) => {
+      console.log('Not connected to coordinator, becoming coordinator');
+      // We might be the first one, act as coordinator
+      becomeCoordinator(peer, roomId, myPeerId);
+    });
+    
+    // If connection doesn't open in 3 seconds, become coordinator
+    setTimeout(() => {
+      if (conn.open === false) {
+        console.log('Coordinator not found, becoming coordinator');
+        becomeCoordinator(peer, roomId, myPeerId);
+      }
+    }, 3000);
+  };
+  
+  // Become the room coordinator
+  const becomeCoordinator = (peer: Peer, roomId: string, myPeerId: string) => {
+    const peers: string[] = [myPeerId];
+    
+    peer.on('connection', (conn) => {
+      conn.on('data', (data: any) => {
+        if (data.type === 'join') {
+          console.log('Peer joining room:', data.peerId);
+          
+          // Send them the current peer list
+          conn.send({ type: 'peers', peers: peers.filter(p => p !== data.peerId) });
+          
+          // Add them to our list
+          if (!peers.includes(data.peerId)) {
+            peers.push(data.peerId);
+            
+            // Notify all other peers about the new peer
+            Object.values(peer.connections).forEach((connections: any) => {
+              connections.forEach((connection: any) => {
+                if (connection.open && connection.peer !== data.peerId) {
+                  connection.send({ type: 'new-peer', peerId: data.peerId });
+                }
+              });
+            });
+          }
+          
+          // Call the new peer
+          if (state.localStream) {
+            setTimeout(() => {
+              callPeer(peer, data.peerId, state.localStream!);
+            }, 500);
+          }
+        }
+      });
+      
+      conn.on('close', () => {
+        // Remove peer from list when they disconnect
+        const index = peers.indexOf(conn.peer);
+        if (index > -1) {
+          peers.splice(index, 1);
+        }
+      });
+    });
   };
 
   const replaceTrack = (track: MediaStreamTrack) => {
