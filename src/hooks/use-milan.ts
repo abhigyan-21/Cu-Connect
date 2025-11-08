@@ -132,8 +132,8 @@ export function useMilan(roomId: string) {
   useEffect(() => {
     if (!state.localStream) return;
 
-    // Use a deterministic peer ID based on room and random component
-    const myPeerId = `cu-${roomId}-${Math.random().toString(36).substr(2, 9)}`;
+    // Generate unique peer ID
+    const myPeerId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     const peer = new Peer(myPeerId, {
       host: '0.peerjs.com',
@@ -151,13 +151,9 @@ export function useMilan(roomId: string) {
 
     peer.on('open', (id) => {
       console.log('My peer ID:', id);
-      toast({ 
-        title: "Connected!", 
-        description: `Room: ${roomId}. Waiting for others to join...`,
-      });
-
-      // Try to connect to the room coordinator
-      connectToRoomCoordinator(peer, roomId, id);
+      
+      // Register with room using a simple API
+      registerWithRoom(peer, roomId, id);
     });
 
     peer.on('call', (call) => {
@@ -282,98 +278,124 @@ export function useMilan(roomId: string) {
     });
   };
 
-  // Connect to room coordinator (first peer in room acts as coordinator)
-  const connectToRoomCoordinator = (peer: Peer, roomId: string, myPeerId: string) => {
-    // The coordinator peer ID is deterministic based on room ID
-    const coordinatorId = `cu-${roomId}-coordinator`;
+  // Register with room using our Next.js API
+  const registerWithRoom = async (peer: Peer, roomId: string, myPeerId: string) => {
+    const ROOM_API = '/api/rooms';
     
-    // Try to connect to coordinator
-    const conn = peer.connect(coordinatorId);
-    
-    conn.on('open', () => {
-      console.log('Connected to room coordinator');
-      // Request list of peers in room
-      conn.send({ type: 'join', peerId: myPeerId });
-    });
-    
-    conn.on('data', (data: any) => {
-      if (data.type === 'peers') {
-        // Received list of peers, call them all
-        console.log('Received peer list:', data.peers);
-        data.peers.forEach((peerId: string) => {
-          if (peerId !== myPeerId && state.localStream) {
-            setTimeout(() => {
-              callPeer(peer, peerId, state.localStream!);
-            }, 500);
-          }
-        });
-      } else if (data.type === 'new-peer') {
-        // New peer joined, call them
-        console.log('New peer joined:', data.peerId);
-        if (data.peerId !== myPeerId && state.localStream) {
-          callPeer(peer, data.peerId, state.localStream!);
-        }
+    try {
+      // Join the room
+      const response = await fetch(`${ROOM_API}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, peerId: myPeerId }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to join room');
       }
-    });
-    
-    conn.on('error', (err) => {
-      console.log('Not connected to coordinator, becoming coordinator');
-      // We might be the first one, act as coordinator
-      becomeCoordinator(peer, roomId, myPeerId);
-    });
-    
-    // If connection doesn't open in 3 seconds, become coordinator
-    setTimeout(() => {
-      if (conn.open === false) {
-        console.log('Coordinator not found, becoming coordinator');
-        becomeCoordinator(peer, roomId, myPeerId);
-      }
-    }, 3000);
-  };
-  
-  // Become the room coordinator
-  const becomeCoordinator = (peer: Peer, roomId: string, myPeerId: string) => {
-    const peers: string[] = [myPeerId];
-    
-    peer.on('connection', (conn) => {
-      conn.on('data', (data: any) => {
-        if (data.type === 'join') {
-          console.log('Peer joining room:', data.peerId);
-          
-          // Send them the current peer list
-          conn.send({ type: 'peers', peers: peers.filter(p => p !== data.peerId) });
-          
-          // Add them to our list
-          if (!peers.includes(data.peerId)) {
-            peers.push(data.peerId);
-            
-            // Notify all other peers about the new peer
-            Object.values(peer.connections).forEach((connections: any) => {
-              connections.forEach((connection: any) => {
-                if (connection.open && connection.peer !== data.peerId) {
-                  connection.send({ type: 'new-peer', peerId: data.peerId });
-                }
-              });
-            });
-          }
-          
-          // Call the new peer
-          if (state.localStream) {
-            setTimeout(() => {
-              callPeer(peer, data.peerId, state.localStream!);
-            }, 500);
-          }
+      
+      const data = await response.json();
+      console.log('Joined room, existing peers:', data.peers);
+      
+      toast({ 
+        title: "Connected!", 
+        description: data.peers.length > 0 
+          ? `${data.peers.length} user(s) in room` 
+          : "Waiting for others to join...",
+      });
+      
+      // Call all existing peers
+      data.peers.forEach((peerId: string) => {
+        if (peerId !== myPeerId && state.localStream) {
+          setTimeout(() => {
+            console.log('Calling existing peer:', peerId);
+            callPeer(peer, peerId, state.localStream!);
+          }, 1000);
         }
       });
       
-      conn.on('close', () => {
-        // Remove peer from list when they disconnect
-        const index = peers.indexOf(conn.peer);
-        if (index > -1) {
-          peers.splice(index, 1);
+      // Poll for new peers every 3 seconds
+      const pollInterval = setInterval(async () => {
+        try {
+          const pollResponse = await fetch(`${ROOM_API}/peers/${roomId}`);
+          if (pollResponse.ok) {
+            const pollData = await pollResponse.json();
+            pollData.peers.forEach((peerId: string) => {
+              if (peerId !== myPeerId && !peersRef.current.has(peerId) && state.localStream) {
+                console.log('Found new peer:', peerId);
+                callPeer(peer, peerId, state.localStream!);
+              }
+            });
+          }
+        } catch (err) {
+          console.error('Error polling for peers:', err);
         }
+      }, 3000);
+      
+      // Cleanup on unmount
+      return () => {
+        clearInterval(pollInterval);
+        fetch(`${ROOM_API}/leave`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomId, peerId: myPeerId }),
+        }).catch(console.error);
+      };
+      
+    } catch (error) {
+      console.error('Error registering with room:', error);
+      toast({
+        title: "Connection Error",
+        description: "Could not connect to room service. Using fallback mode.",
+        variant: "destructive",
       });
+      
+      // Fallback: use localStorage for same-device testing
+      useFallbackMode(peer, roomId, myPeerId);
+    }
+  };
+  
+  // Fallback mode for local testing
+  const useFallbackMode = (peer: Peer, roomId: string, myPeerId: string) => {
+    console.log('Using fallback mode (localStorage)');
+    
+    const roomKey = `cu-room-${roomId}`;
+    const roomPeers = JSON.parse(localStorage.getItem(roomKey) || '[]');
+    
+    // Call existing peers
+    roomPeers.forEach((peerId: string) => {
+      if (peerId !== myPeerId && state.localStream) {
+        setTimeout(() => {
+          callPeer(peer, peerId, state.localStream!);
+        }, 1000);
+      }
     });
+    
+    // Add ourselves
+    if (!roomPeers.includes(myPeerId)) {
+      roomPeers.push(myPeerId);
+      localStorage.setItem(roomKey, JSON.stringify(roomPeers));
+    }
+    
+    // Listen for storage changes
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === roomKey && e.newValue) {
+        const newPeers = JSON.parse(e.newValue);
+        newPeers.forEach((peerId: string) => {
+          if (peerId !== myPeerId && !peersRef.current.has(peerId) && state.localStream) {
+            callPeer(peer, peerId, state.localStream!);
+          }
+        });
+      }
+    };
+    
+    window.addEventListener('storage', handleStorage);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      const peers = JSON.parse(localStorage.getItem(roomKey) || '[]');
+      localStorage.setItem(roomKey, JSON.stringify(peers.filter((id: string) => id !== myPeerId)));
+    };
   };
 
   const replaceTrack = (track: MediaStreamTrack) => {
