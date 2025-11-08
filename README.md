@@ -1,80 +1,149 @@
 # CU-Connect
 
-A real-time video conferencing application built with Next.js and WebRTC.
-
-## ✅ WebRTC Enabled with PeerJS
-
-Multi-user video calls are now working! Users can join rooms and see each other in real-time.
+A real-time video conferencing application built with Next.js, WebRTC, and PeerJS.
 
 ## Features
 
-- 🎥 HD Video & Audio - Crystal-clear video quality
-- 🎤 Audio Controls - Mute/unmute and device selection
-- 🖥️ Screen Share - Share your screen for presentations
-- 🚪 Easy Rooms - Create or join rooms instantly with a simple code
+- 🎥 **HD Video & Audio** - Crystal-clear video quality
+- 🎤 **Audio Controls** - Mute/unmute and device selection
+- 🖥️ **Screen Share** - Share your screen for presentations
+- 🚪 **Easy Rooms** - Create or join rooms with a simple code
+- 🔒 **Room Validation** - Only created rooms can be joined
+- 🌐 **Cross-Network Support** - TURN servers for NAT traversal
 
-## Getting Started
+## Quick Start
 
-### Local Development
-
-1. Install dependencies:
+### 1. Install Dependencies
 ```bash
 npm install
 ```
 
-2. Run the development server:
+### 2. Run Development Server
 ```bash
 npm run dev
 ```
 
-3. Open [http://localhost:9002](http://localhost:9002)
+### 3. Open in Browser
+Navigate to [http://localhost:9002](http://localhost:9002)
 
-### Deployment
+## How to Use
 
-#### Deploy to Vercel (Recommended)
+### Creating a Room
+1. Click "Create a New Room"
+2. Share the room ID with others
+3. Wait for participants to join
 
-1. Push your code to GitHub
-2. Go to [vercel.com](https://vercel.com)
-3. Click "New Project"
-4. Import your GitHub repository
-5. Click "Deploy"
+### Joining a Room
+1. Enter the room ID
+2. Click "Join Room"
+3. Allow camera and microphone permissions
 
-Or use Vercel CLI:
-```bash
-npm install -g vercel
-vercel
-```
+## Deployment
+
+### Vercel (Recommended)
+1. Push code to GitHub
+2. Import repository on [vercel.com](https://vercel.com)
+3. Click "Deploy"
+
+### Netlify
+1. Push code to GitHub
+2. Import repository on [netlify.com](https://netlify.com)
+3. Build command: `npm run build`
+4. Publish directory: `.next`
+
+## Troubleshooting
+
+### Can't See Other Users?
+
+**Quick Fixes:**
+1. **Both use mobile data** (not WiFi) - 90% success rate
+2. **Refresh both pages** and rejoin
+3. **Check browser permissions** - Allow camera/microphone
+4. **Use Chrome or Edge** - Best WebRTC support
+
+### Connection Issues?
+
+**Check browser console (F12) for:**
+- ✅ "ICE connection state: connected" - Good!
+- ❌ "ICE connection failed" - Network issue
+
+**Solutions:**
+- Switch to mobile data
+- Try different network
+- Disable VPN if using one
+- Check firewall settings
+
+### Room Not Found?
+
+- Verify the room ID is correct
+- Room creator must join first
+- Rooms are temporary (cleared on server restart)
 
 ## Tech Stack
 
-- Next.js 15 with Turbopack
-- React 18
-- TypeScript
-- Tailwind CSS
-- WebRTC for peer-to-peer video/audio
-- Radix UI components
+- **Frontend:** Next.js 15, React 18, TypeScript
+- **Styling:** Tailwind CSS, Radix UI
+- **Video:** WebRTC, PeerJS
+- **Signaling:** Next.js API Routes
+- **Deployment:** Vercel
 
 ## Project Structure
 
 ```
-Cu-Connect/
-├── src/
-│   ├── app/              # Next.js app directory
-│   │   ├── room/         # Room pages
-│   │   ├── layout.tsx    # Root layout
-│   │   └── page.tsx      # Home page
-│   ├── components/       # React components
-│   │   ├── ui/           # UI components
-│   │   ├── room-controls.tsx
-│   │   └── video-player.tsx
-│   ├── hooks/            # Custom React hooks
-│   │   ├── use-milan.ts  # WebRTC logic
-│   │   └── use-toast.ts
-│   └── lib/              # Utility functions
-├── public/               # Static assets
-└── package.json
+src/
+├── app/
+│   ├── api/rooms/        # Room management API
+│   ├── room/[roomId]/    # Room page
+│   └── page.tsx          # Home page
+├── components/
+│   ├── ui/               # UI components
+│   ├── room-controls.tsx # Meeting controls
+│   └── video-player.tsx  # Video display
+├── hooks/
+│   └── use-milan.ts      # WebRTC logic
+└── lib/
+    ├── rooms.ts          # Room storage
+    └── utils.ts          # Utilities
 ```
+
+## API Endpoints
+
+- `POST /api/rooms/create` - Create a new room
+- `POST /api/rooms/join` - Join an existing room
+- `GET /api/rooms/[roomId]` - Get room participants
+- `POST /api/rooms/leave` - Leave a room
+
+## Known Limitations
+
+- **Network Restrictions:** May not work on corporate networks with strict firewalls
+- **Room Persistence:** Rooms are stored in memory (reset on deployment)
+- **Scalability:** Best for 2-4 users (peer-to-peer architecture)
+- **Browser Support:** Works best on Chrome, Edge, Firefox
+
+## For Production Use
+
+Consider these improvements:
+
+1. **Database:** Replace in-memory storage with Redis/Supabase
+2. **TURN Server:** Deploy your own for better reliability
+3. **Media Server:** Use SFU (Mediasoup) for 5+ users
+4. **Managed Service:** Consider Daily.co, Agora, or Twilio
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
 ## License
 
 MIT
+
+## Support
+
+For issues or questions, open an issue on GitHub.
+
+---
+
+Built with ❤️ for Chandigarh University
