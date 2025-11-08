@@ -3,13 +3,11 @@
 import { useEffect, useCallback, useReducer, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "./use-toast";
+import Peer, { MediaConnection } from "peerjs";
 
-// In a real app, you'd use a more robust WebRTC library or a fully implemented service.
-// These are placeholder types and functions for demonstration.
-type PeerConnection = RTCPeerConnection;
 interface RemotePeer {
   id: string;
-  connection: PeerConnection;
+  connection: MediaConnection;
   stream?: MediaStream;
 }
 
@@ -88,6 +86,8 @@ export function useMilan(roomId: string) {
   const router = useRouter();
   const { toast } = useToast();
   const cameraStreamRef = useRef<MediaStream | null>(null);
+  const peerRef = useRef<Peer | null>(null);
+  const peersRef = useRef<Map<string, MediaConnection>>(new Map());
 
   const getDevices = useCallback(async () => {
     try {
@@ -122,22 +122,202 @@ export function useMilan(roomId: string) {
     return () => {
         state.localStream?.getTracks().forEach(track => track.stop());
         cameraStreamRef.current?.getTracks().forEach(track => track.stop());
+        peerRef.current?.destroy();
         dispatch({ type: 'RESET_STATE' });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Initialize PeerJS and handle connections
   useEffect(() => {
-    // Signaling setup would go here when implementing WebRTC
-    console.log("Room initialized:", roomId);
-  }, [roomId]);
+    if (!state.localStream) return;
+
+    // Initialize PeerJS with room-based peer ID
+    const peer = new Peer(`${roomId}-${Math.random().toString(36).substr(2, 9)}`, {
+      host: '0.peerjs.com',
+      port: 443,
+      path: '/',
+      secure: true,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+        ],
+      },
+    });
+
+    peer.on('open', (id) => {
+      console.log('My peer ID:', id);
+      toast({ 
+        title: "Connected!", 
+        description: "You're now in the room. Share the room ID with others to join.",
+      });
+
+      // Broadcast presence to other peers in the room
+      broadcastToRoom(peer, roomId, id);
+    });
+
+    peer.on('call', (call) => {
+      console.log('Receiving call from:', call.peer);
+      
+      // Answer the call with our stream
+      call.answer(state.localStream!);
+      
+      call.on('stream', (remoteStream) => {
+        console.log('Received remote stream from:', call.peer);
+        
+        dispatch({
+          type: 'ADD_REMOTE_PEER',
+          peer: {
+            id: call.peer,
+            connection: call,
+            stream: remoteStream,
+          },
+        });
+        
+        peersRef.current.set(call.peer, call);
+      });
+
+      call.on('close', () => {
+        console.log('Call closed with:', call.peer);
+        dispatch({ type: 'REMOVE_REMOTE_PEER', peerId: call.peer });
+        peersRef.current.delete(call.peer);
+      });
+
+      call.on('error', (err) => {
+        console.error('Call error:', err);
+        dispatch({ type: 'REMOVE_REMOTE_PEER', peerId: call.peer });
+        peersRef.current.delete(call.peer);
+      });
+    });
+
+    peer.on('connection', (conn) => {
+      conn.on('data', (data: any) => {
+        if (data.type === 'join-room' && data.roomId === roomId) {
+          // New peer joined, call them
+          console.log('New peer joined room:', data.peerId);
+          callPeer(peer, data.peerId, state.localStream!);
+        }
+      });
+    });
+
+    peer.on('error', (err) => {
+      console.error('PeerJS error:', err);
+      if (err.type === 'peer-unavailable') {
+        // Peer disconnected, remove them
+        const peerId = err.message.split(' ').pop();
+        if (peerId) {
+          dispatch({ type: 'REMOVE_REMOTE_PEER', peerId });
+          peersRef.current.delete(peerId);
+        }
+      }
+    });
+
+    peerRef.current = peer;
+
+    return () => {
+      peer.destroy();
+    };
+  }, [state.localStream, roomId, toast]);
+
+  // Helper function to call a peer
+  const callPeer = (peer: Peer, remotePeerId: string, stream: MediaStream) => {
+    if (peersRef.current.has(remotePeerId)) {
+      console.log('Already connected to:', remotePeerId);
+      return;
+    }
+
+    console.log('Calling peer:', remotePeerId);
+    const call = peer.call(remotePeerId, stream);
+
+    call.on('stream', (remoteStream) => {
+      console.log('Received stream from:', remotePeerId);
+      
+      dispatch({
+        type: 'ADD_REMOTE_PEER',
+        peer: {
+          id: remotePeerId,
+          connection: call,
+          stream: remoteStream,
+        },
+      });
+      
+      peersRef.current.set(remotePeerId, call);
+    });
+
+    call.on('close', () => {
+      console.log('Call closed with:', remotePeerId);
+      dispatch({ type: 'REMOVE_REMOTE_PEER', peerId: remotePeerId });
+      peersRef.current.delete(remotePeerId);
+    });
+
+    call.on('error', (err) => {
+      console.error('Call error with', remotePeerId, ':', err);
+      dispatch({ type: 'REMOVE_REMOTE_PEER', peerId: remotePeerId });
+      peersRef.current.delete(remotePeerId);
+    });
+  };
+
+  // Helper function to broadcast presence to room
+  const broadcastToRoom = (peer: Peer, roomId: string, myPeerId: string) => {
+    // In a production app, you'd use a proper room management system
+    // For now, we'll use a simple approach with peer IDs containing the room ID
+    console.log('Broadcasting presence to room:', roomId);
+    
+    // Try to connect to potential peers in the room
+    // This is a simplified approach - in production, use a proper signaling server
+    const roomPrefix = `${roomId}-`;
+    
+    // Store our peer ID in localStorage for other tabs/users to discover
+    const roomPeers = JSON.parse(localStorage.getItem(`room-${roomId}`) || '[]');
+    if (!roomPeers.includes(myPeerId)) {
+      roomPeers.push(myPeerId);
+      localStorage.setItem(`room-${roomId}`, JSON.stringify(roomPeers));
+    }
+
+    // Try to connect to existing peers
+    roomPeers.forEach((peerId: string) => {
+      if (peerId !== myPeerId && state.localStream) {
+        setTimeout(() => {
+          callPeer(peer, peerId, state.localStream!);
+        }, 1000);
+      }
+    });
+
+    // Listen for storage changes (other tabs/users joining)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === `room-${roomId}` && e.newValue) {
+        const newPeers = JSON.parse(e.newValue);
+        newPeers.forEach((peerId: string) => {
+          if (peerId !== myPeerId && !peersRef.current.has(peerId) && state.localStream) {
+            callPeer(peer, peerId, state.localStream!);
+          }
+        });
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      // Clean up our peer ID from localStorage
+      const peers = JSON.parse(localStorage.getItem(`room-${roomId}`) || '[]');
+      const filtered = peers.filter((id: string) => id !== myPeerId);
+      localStorage.setItem(`room-${roomId}`, JSON.stringify(filtered));
+    };
+  };
 
   const replaceTrack = (track: MediaStreamTrack) => {
     if (state.localStream) {
-      const senders = Object.values(state.remotePeers).flatMap(
-        (peer) => peer.connection.getSenders().filter(s => s.track?.kind === 'video')
-      );
-      senders.forEach(sender => sender.replaceTrack(track));
+      // Replace track in all peer connections
+      peersRef.current.forEach((call) => {
+        const sender = call.peerConnection
+          .getSenders()
+          .find((s) => s.track?.kind === track.kind);
+        if (sender) {
+          sender.replaceTrack(track);
+        }
+      });
 
       const newStream = new MediaStream([track, ...state.localStream.getAudioTracks()]);
       dispatch({ type: 'SET_LOCAL_STREAM', stream: newStream });
@@ -223,10 +403,24 @@ export function useMilan(roomId: string) {
   const leaveRoom = useCallback(() => {
     state.localStream?.getTracks().forEach((track) => track.stop());
     cameraStreamRef.current?.getTracks().forEach(track => track.stop());
-    Object.values(state.remotePeers).forEach((peer) => peer.connection.close());
+    
+    // Close all peer connections
+    peersRef.current.forEach((call) => call.close());
+    peersRef.current.clear();
+    
+    // Clean up from room
+    if (peerRef.current) {
+      const myPeerId = peerRef.current.id;
+      const peers = JSON.parse(localStorage.getItem(`room-${roomId}`) || '[]');
+      const filtered = peers.filter((id: string) => id !== myPeerId);
+      localStorage.setItem(`room-${roomId}`, JSON.stringify(filtered));
+      
+      peerRef.current.destroy();
+    }
+    
     dispatch({ type: "RESET_STATE" });
     router.push("/");
-  }, [state.localStream, state.remotePeers, router]);
+  }, [state.localStream, roomId, router]);
 
   return {
     state,
