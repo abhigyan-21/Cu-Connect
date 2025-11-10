@@ -433,13 +433,6 @@ export function useMilan(roomId: string) {
       const data = await response.json();
       console.log('Joined room, existing peers:', data.peers);
       
-      toast({ 
-        title: "Connected!", 
-        description: data.peers.length > 0 
-          ? `${data.peers.length} user(s) in room` 
-          : "Waiting for others to join...",
-      });
-      
       // Call all existing peers with longer delay for connection stability
       data.peers.forEach((peerId: string, index: number) => {
         if (peerId !== myPeerId && state.localStream) {

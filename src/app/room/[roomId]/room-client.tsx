@@ -3,11 +3,21 @@
 import { useMilan } from "@/hooks/use-milan";
 import { VideoPlayer } from "@/components/video-player";
 import { RoomControls } from "@/components/room-controls";
+import { PeersPanel } from "@/components/peers-panel";
 
 export default function RoomClient({ roomId }: { roomId: string }) {
   const { state, actions } = useMilan(roomId);
 
   const remoteStreams = Object.values(state.remotePeers).filter(p => p.stream);
+  
+  // Calculate total peers: yourself + remote peers with streams
+  const totalPeers = 1 + remoteStreams.length;
+  
+  // Get peer names
+  const peerNames = [
+    state.isScreenSharing ? "You (Screen Sharing)" : "You",
+    ...remoteStreams.map(peer => peer.id)
+  ];
 
   // Debug logging
   console.log('RoomClient render:', {
@@ -29,8 +39,13 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           <img src="/cu_logo.jpg" alt="CU Logo" className="h-10 w-auto" />
           <span className="text-xl font-bold text-primary font-headline">CU-Connect</span>
         </div>
-        <div className="text-sm bg-card/80 backdrop-blur-md px-3 py-1.5 rounded-md">
-          Room: <span className="font-bold font-mono">{roomId}</span>
+        <div className="flex items-center gap-3">
+          <div className="text-sm bg-card/80 backdrop-blur-md px-3 py-1.5 rounded-md">
+            Room: <span className="font-bold font-mono">{roomId}</span>
+          </div>
+          <div className="text-sm bg-primary/10 backdrop-blur-md px-3 py-1.5 rounded-md border border-primary/20">
+            <span className="font-semibold text-primary">{totalPeers}</span> {totalPeers === 1 ? 'user' : 'users'}
+          </div>
         </div>
       </header>
 
@@ -64,6 +79,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           />
         )}
       </footer>
+
+      {/* Peers Panel - Bottom Right */}
+      <div className="absolute bottom-4 right-4 z-10">
+        <PeersPanel totalPeers={totalPeers} peerNames={peerNames} />
+      </div>
     </div>
   );
 }
