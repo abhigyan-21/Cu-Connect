@@ -188,7 +188,7 @@ export function useMilan(roomId: string) {
             credential: 'w1uxM55V9yVoqyVFjt+mxDBV0F87AUCemaYVQGxsPLw=',
           },
         ],
-        iceTransportPolicy: 'all', // Try all connection types
+        iceTransportPolicy: 'relay', // Force TURN relay for testing (change to 'all' for production)
         iceCandidatePoolSize: 10,
         bundlePolicy: 'max-bundle',
         rtcpMuxPolicy: 'require',
@@ -490,13 +490,13 @@ export function useMilan(roomId: string) {
           : "Waiting for others to join...",
       });
       
-      // Call all existing peers
-      data.peers.forEach((peerId: string) => {
+      // Call all existing peers with longer delay for connection stability
+      data.peers.forEach((peerId: string, index: number) => {
         if (peerId !== myPeerId && state.localStream) {
           setTimeout(() => {
             console.log('Calling existing peer:', peerId);
             callPeer(peer, peerId, state.localStream!);
-          }, 1000);
+          }, 2000 + (index * 1000)); // Stagger calls
         }
       });
       

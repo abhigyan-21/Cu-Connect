@@ -21,7 +21,7 @@ npm install
 ### 2. Configure MongoDB
 Create a `.env.local` file in the root directory:
 ```env
-MONGODB_URI=mongodb://user_4447zrz99:p4447zrz99@bytexldb.com:5050/db_4447zrz99
+MONGODB_URI=mongodb://user
 ```
 
 ### 3. Run Development Server
@@ -151,7 +151,7 @@ The application uses MongoDB to persist room data. The database stores:
 ### Environment Variables
 
 ```env
-MONGODB_URI=mongodb://user_4447zrz99:p4447zrz99@bytexldb.com:5050/db_4447zrz99
+MONGODB_URI=mongodb://user_
 CLEANUP_TOKEN=your-secret-token  # Optional: For cleanup API authentication
 ```
 
