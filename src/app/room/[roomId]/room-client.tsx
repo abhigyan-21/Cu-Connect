@@ -40,6 +40,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             stream={state.localStream}
             name={state.isScreenSharing ? "Your Screen" : "You"}
             isMuted
+            isScreenShare={state.isScreenSharing}
           />
         )}
         {remoteStreams.map((peer) => (

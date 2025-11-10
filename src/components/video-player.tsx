@@ -2,18 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { User } from "lucide-react";
+import { User, Maximize2, Minimize2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface VideoPlayerProps {
   stream: MediaStream;
   name: string;
   isMuted?: boolean;
+  isScreenShare?: boolean;
 }
 
-export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
+export function VideoPlayer({ stream, name, isMuted, isScreenShare = false }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [hasVideo, setHasVideo] = useState(true); // Start with true, assume video exists
   const [error, setError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -134,8 +139,46 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
     };
   }, [stream, name]);
 
+  // Handle fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = async () => {
+    if (!containerRef.current) return;
+
+    try {
+      if (!document.fullscreenElement) {
+        await containerRef.current.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      console.error('Error toggling fullscreen:', err);
+    }
+  };
+
+  const handleVideoClick = () => {
+    toggleFullscreen();
+  };
+
   return (
-    <Card className="relative aspect-video w-full overflow-hidden bg-muted flex items-center justify-center">
+    <Card 
+      ref={containerRef}
+      className={`relative aspect-video w-full overflow-hidden bg-muted flex items-center justify-center cursor-pointer group ${
+        isScreenShare ? 'ring-2 ring-primary' : ''
+      }`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={handleVideoClick}
+    >
       <video
         ref={videoRef}
         autoPlay
@@ -144,7 +187,30 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
         className="h-full w-full object-cover"
         style={{ display: 'block' }}
       />
-      <div className="absolute bottom-2 left-2 rounded-md bg-black/50 px-2 py-1 text-white text-sm backdrop-blur-sm z-10">
+      
+      {/* Fullscreen button - shows on hover */}
+      {isHovered && (
+        <Button
+          variant="secondary"
+          size="icon"
+          className="absolute top-2 right-2 z-20 opacity-80 hover:opacity-100 transition-opacity"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFullscreen();
+          }}
+        >
+          {isFullscreen ? (
+            <Minimize2 className="h-4 w-4" />
+          ) : (
+            <Maximize2 className="h-4 w-4" />
+          )}
+        </Button>
+      )}
+
+      <div className="absolute bottom-2 left-2 rounded-md bg-black/50 px-2 py-1 text-white text-sm backdrop-blur-sm z-10 pointer-events-none flex items-center gap-2">
+        {isScreenShare && (
+          <span className="text-xs bg-primary px-1.5 py-0.5 rounded">SCREEN</span>
+        )}
         {name}
       </div>
       {error && (
@@ -153,10 +219,19 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
         </div>
       )}
       {!hasVideo && stream.getVideoTracks().length === 0 && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white z-[5]">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white z-[5] pointer-events-none">
           <User className="h-16 w-16" />
           <p className="mt-2 text-lg font-semibold">{name}</p>
           <p className="text-sm text-muted-foreground">No video track</p>
+        </div>
+      )}
+      
+      {/* Click hint - shows briefly on hover */}
+      {isHovered && !isFullscreen && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20 z-[15] pointer-events-none">
+          <div className="bg-black/60 px-4 py-2 rounded-lg text-white text-sm backdrop-blur-sm">
+            Click to fullscreen
+          </div>
         </div>
       )}
     </Card>
