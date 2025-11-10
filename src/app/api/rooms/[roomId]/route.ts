@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { rooms } from '@/lib/rooms';
+import { getRoomPeers } from '@/lib/rooms-db';
 
 export async function GET(
   request: Request,
@@ -8,8 +8,7 @@ export async function GET(
   try {
     const { roomId } = await params;
     
-    const room = rooms.get(roomId);
-    const peers = room ? Array.from(room) : [];
+    const peers = await getRoomPeers(roomId);
     
     return NextResponse.json({
       roomId,

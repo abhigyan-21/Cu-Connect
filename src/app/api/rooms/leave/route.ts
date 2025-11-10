@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { rooms } from '@/lib/rooms';
+import { removePeerFromRoom, getRoomPeers } from '@/lib/rooms-db';
 
 export async function POST(request: Request) {
   try {
@@ -12,16 +12,10 @@ export async function POST(request: Request) {
       );
     }
     
-    const room = rooms.get(roomId);
-    if (room) {
-      room.delete(peerId);
-      console.log(`Peer ${peerId} left room ${roomId}. Remaining: ${room.size}`);
-      
-      // Clean up empty rooms
-      if (room.size === 0) {
-        rooms.delete(roomId);
-      }
-    }
+    await removePeerFromRoom(roomId, peerId);
+    const remainingPeers = await getRoomPeers(roomId);
+    
+    console.log(`Peer ${peerId} left room ${roomId}. Remaining: ${remainingPeers.length}`);
     
     return NextResponse.json({ success: true });
   } catch (error) {

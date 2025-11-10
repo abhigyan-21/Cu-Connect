@@ -1,5 +1,12 @@
-// Shared in-memory room storage
-// In production, replace with Redis, Supabase, or Firebase
+/**
+ * @deprecated This file is no longer used. The application now uses MongoDB for room storage.
+ * See src/lib/rooms-db.ts for the new implementation.
+ * 
+ * This file is kept for reference only and can be safely deleted.
+ */
+
+// Legacy in-memory room storage (DEPRECATED - DO NOT USE)
+// Replaced with MongoDB implementation in rooms-db.ts
 export const rooms = new Map<string, Set<string>>();
 
 // Clean up old/empty rooms periodically

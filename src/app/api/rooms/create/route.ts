@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { rooms } from '@/lib/rooms';
+import { createRoom } from '@/lib/rooms-db';
 
 export async function POST(request: Request) {
   try {
@@ -12,25 +12,25 @@ export async function POST(request: Request) {
       );
     }
     
-    // Check if room already exists
-    if (rooms.has(roomId)) {
+    // Create new room in MongoDB
+    const room = await createRoom(roomId);
+    console.log(`Room created: ${roomId}`);
+    
+    return NextResponse.json({
+      success: true,
+      roomId: room.roomId,
+      message: 'Room created successfully',
+    });
+  } catch (error: any) {
+    console.error('Error in /api/rooms/create:', error);
+    
+    if (error.message === 'Room already exists') {
       return NextResponse.json(
         { error: 'Room already exists' },
         { status: 409 }
       );
     }
     
-    // Create new room
-    rooms.set(roomId, new Set());
-    console.log(`Room created: ${roomId}`);
-    
-    return NextResponse.json({
-      success: true,
-      roomId,
-      message: 'Room created successfully',
-    });
-  } catch (error) {
-    console.error('Error in /api/rooms/create:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

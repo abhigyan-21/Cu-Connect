@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { rooms } from '@/lib/rooms';
+import { addPeerToRoom, getRoomPeers } from '@/lib/rooms-db';
 
 export async function POST(request: Request) {
   try {
@@ -12,29 +12,27 @@ export async function POST(request: Request) {
       );
     }
     
-    // Check if room exists
-    if (!rooms.has(roomId)) {
+    // Add peer to room in MongoDB
+    const existingPeers = await addPeerToRoom(roomId, peerId);
+    const allPeers = await getRoomPeers(roomId);
+    
+    console.log(`Peer ${peerId} joined room ${roomId}. Total peers: ${allPeers.length}`);
+    
+    return NextResponse.json({
+      success: true,
+      peers: existingPeers, // Return peers that were already in the room
+      totalPeers: allPeers.length,
+    });
+  } catch (error: any) {
+    console.error('Error in /api/rooms/join:', error);
+    
+    if (error.message === 'Room not found') {
       return NextResponse.json(
         { error: 'Room does not exist', code: 'ROOM_NOT_FOUND' },
         { status: 404 }
       );
     }
     
-    const room = rooms.get(roomId)!;
-    const existingPeers = Array.from(room);
-    
-    // Add new peer
-    room.add(peerId);
-    
-    console.log(`Peer ${peerId} joined room ${roomId}. Total peers: ${room.size}`);
-    
-    return NextResponse.json({
-      success: true,
-      peers: existingPeers, // Return peers that were already in the room
-      totalPeers: room.size,
-    });
-  } catch (error) {
-    console.error('Error in /api/rooms/join:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

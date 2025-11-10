@@ -33,16 +33,36 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
       }))
     });
 
-    // Only set stream if it's different
-    if (video.srcObject !== stream) {
-      video.srcObject = stream;
-    }
+    // Set stream and ensure video element is ready
+    video.srcObject = stream;
+    video.load(); // Force reload
     
     // Check if video track exists and is enabled
     const videoTrack = stream.getVideoTracks()[0];
-    setHasVideo(videoTrack && videoTrack.enabled && videoTrack.readyState === 'live');
+    const hasVideoTrack = videoTrack && videoTrack.enabled && videoTrack.readyState === 'live';
+    setHasVideo(hasVideoTrack);
+    setError(null);
 
-    // Wait a bit before trying to play
+    // Handle video metadata loaded
+    const handleLoadedMetadata = () => {
+      console.log(`Video metadata loaded for ${name}`);
+      video.play().catch(err => {
+        console.error('Error playing video:', err);
+        setError('Failed to play video');
+      });
+    };
+
+    // Handle video can play
+    const handleCanPlay = () => {
+      console.log(`Video can play for ${name}`);
+      const vTrack = stream.getVideoTracks()[0];
+      setHasVideo(vTrack && vTrack.enabled && vTrack.readyState === 'live');
+    };
+
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('canplay', handleCanPlay);
+
+    // Try to play immediately
     const playTimeout = setTimeout(() => {
       video.play().catch(err => {
         console.error('Error playing video:', err);
@@ -70,6 +90,8 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
 
     return () => {
       clearTimeout(playTimeout);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('canplay', handleCanPlay);
       stream.getTracks().forEach(track => {
         track.removeEventListener('enabled', handleTrackEnabled);
         track.removeEventListener('mute', handleTrackEnabled);
@@ -86,17 +108,18 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
         playsInline
         muted={isMuted}
         className="h-full w-full object-cover"
+        style={{ display: 'block' }}
       />
-      <div className="absolute bottom-2 left-2 rounded-md bg-black/50 px-2 py-1 text-white text-sm backdrop-blur-sm">
+      <div className="absolute bottom-2 left-2 rounded-md bg-black/50 px-2 py-1 text-white text-sm backdrop-blur-sm z-10">
         {name}
       </div>
       {error && (
-        <div className="absolute top-2 left-2 rounded-md bg-red-500/80 px-2 py-1 text-white text-xs">
+        <div className="absolute top-2 left-2 rounded-md bg-red-500/80 px-2 py-1 text-white text-xs z-10">
           {error}
         </div>
       )}
       {!hasVideo && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white z-[5]">
           <User className="h-16 w-16" />
           <p className="mt-2 text-lg font-semibold">{name}</p>
           <p className="text-sm text-muted-foreground">

@@ -18,12 +18,18 @@ A real-time video conferencing application built with Next.js, WebRTC, and PeerJ
 npm install
 ```
 
-### 2. Run Development Server
+### 2. Configure MongoDB
+Create a `.env.local` file in the root directory:
+```env
+MONGODB_URI=mongodb://user_4447zrz99:p4447zrz99@bytexldb.com:5050/db_4447zrz99
+```
+
+### 3. Run Development Server
 ```bash
 npm run dev
 ```
 
-### 3. Open in Browser
+### 4. Open in Browser
 Navigate to [http://localhost:9002](http://localhost:9002)
 
 ## How to Use
@@ -84,6 +90,7 @@ Navigate to [http://localhost:9002](http://localhost:9002)
 - **Frontend:** Next.js 15, React 18, TypeScript
 - **Styling:** Tailwind CSS, Radix UI
 - **Video:** WebRTC, PeerJS
+- **Database:** MongoDB
 - **Signaling:** Next.js API Routes
 - **Deployment:** Vercel
 
@@ -102,7 +109,9 @@ src/
 ├── hooks/
 │   └── use-milan.ts      # WebRTC logic
 └── lib/
-    ├── rooms.ts          # Room storage
+    ├── mongodb.ts        # MongoDB connection
+    ├── rooms-db.ts       # Room database operations
+    ├── rooms.ts          # Legacy in-memory storage
     └── utils.ts          # Utilities
 ```
 
@@ -112,22 +121,49 @@ src/
 - `POST /api/rooms/join` - Join an existing room
 - `GET /api/rooms/[roomId]` - Get room participants
 - `POST /api/rooms/leave` - Leave a room
+- `POST /api/rooms/cleanup` - Clean up old/empty rooms (requires auth token)
 
 ## Known Limitations
 
 - **Network Restrictions:** May not work on corporate networks with strict firewalls
-- **Room Persistence:** Rooms are stored in memory (reset on deployment)
+- **Room Cleanup:** Old rooms are cleaned up automatically after 1 hour of inactivity
 - **Scalability:** Best for 2-4 users (peer-to-peer architecture)
 - **Browser Support:** Works best on Chrome, Edge, Firefox
+
+## MongoDB Setup
+
+The application uses MongoDB to persist room data. The database stores:
+- Room IDs and creation timestamps
+- Active peer connections per room
+- Automatic cleanup of inactive rooms
+
+### Database Schema
+
+```typescript
+{
+  roomId: string,      // Unique room identifier
+  peers: string[],     // Array of peer IDs in the room
+  createdAt: Date,     // Room creation timestamp
+  updatedAt: Date      // Last activity timestamp
+}
+```
+
+### Environment Variables
+
+```env
+MONGODB_URI=mongodb://user_4447zrz99:p4447zrz99@bytexldb.com:5050/db_4447zrz99
+CLEANUP_TOKEN=your-secret-token  # Optional: For cleanup API authentication
+```
 
 ## For Production Use
 
 Consider these improvements:
 
-1. **Database:** Replace in-memory storage with Redis/Supabase
-2. **TURN Server:** Deploy your own for better reliability
-3. **Media Server:** Use SFU (Mediasoup) for 5+ users
-4. **Managed Service:** Consider Daily.co, Agora, or Twilio
+1. **TURN Server:** Deploy your own for better reliability
+2. **Media Server:** Use SFU (Mediasoup) for 5+ users
+3. **Managed Service:** Consider Daily.co, Agora, or Twilio
+4. **Database Indexing:** Add indexes on roomId and updatedAt fields
+5. **Monitoring:** Set up alerts for database connection issues
 
 ## Contributing
 
