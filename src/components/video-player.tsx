@@ -34,8 +34,11 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
       }))
     });
 
-    // Set stream directly
-    video.srcObject = stream;
+    // Only set stream if it's different from current
+    if (video.srcObject !== stream) {
+      console.log(`Setting new stream for ${name}`);
+      video.srcObject = stream;
+    }
     
     // Check if video track exists
     const videoTrack = stream.getVideoTracks()[0];
@@ -51,9 +54,13 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
     const handleLoadedMetadata = () => {
       console.log(`✅ Video metadata loaded for ${name}`);
       setHasVideo(true);
-      video.play().catch(err => {
-        console.error('Error playing video:', err);
-      });
+      // Play after metadata is loaded
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(err => {
+          console.error('Error playing video after metadata:', err);
+        });
+      }
     };
 
     // Handle video can play
@@ -69,18 +76,32 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
       setError(null);
     };
 
+    // Handle errors
+    const handleError = (e: Event) => {
+      console.error(`Video error for ${name}:`, e);
+      setError('Video playback error');
+    };
+
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('playing', handlePlaying);
+    video.addEventListener('error', handleError);
 
-    // Play video
-    video.play().catch(err => {
-      console.error('Error playing video:', err);
-      // Retry
-      setTimeout(() => {
-        video.play().catch(e => console.error('Retry failed:', e));
-      }, 500);
-    });
+    // Only play if stream is new
+    if (video.srcObject === stream && video.paused) {
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(err => {
+          console.error('Error playing video:', err);
+          // Retry once after a delay
+          setTimeout(() => {
+            if (video.paused) {
+              video.play().catch(e => console.error('Retry failed:', e));
+            }
+          }, 500);
+        });
+      }
+    }
 
     // Listen for track changes
     const handleTrackEnabled = () => {
@@ -102,6 +123,7 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('playing', handlePlaying);
+      video.removeEventListener('error', handleError);
       stream.getTracks().forEach(track => {
         if (track.kind === 'video') {
           track.removeEventListener('enabled', handleTrackEnabled);

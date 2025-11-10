@@ -128,9 +128,103 @@ export function useMilan(roomId: string) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Helper function to call a peer - moved outside useEffect
+  const callPeer = useCallback((peer: Peer, remotePeerId: string, stream: MediaStream) => {
+    if (peersRef.current.has(remotePeerId)) {
+      console.log('Already connected to:', remotePeerId);
+      return;
+    }
+
+    console.log('Calling peer:', remotePeerId);
+    console.log('Calling with stream:', stream.getTracks().map(t => `${t.kind}: ${t.enabled}`));
+    
+    // Verify we have a valid stream
+    if (!stream || stream.getTracks().length === 0) {
+      console.error('Cannot call peer: invalid stream');
+      toast({
+        title: "Connection Error",
+        description: "Cannot connect: No media stream available.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const call = peer.call(remotePeerId, stream);
+
+    call.on('stream', (remoteStream) => {
+      console.log('Received stream from:', remotePeerId);
+      console.log('Remote stream tracks:', remoteStream.getTracks().map(t => `${t.kind}: ${t.enabled}`));
+      
+      // Verify stream has tracks
+      if (remoteStream.getTracks().length === 0) {
+        console.error('Remote stream has no tracks!');
+        toast({
+          title: "Connection Issue",
+          description: "Received empty stream from peer. They may need to allow camera/mic access.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      dispatch({
+        type: 'ADD_REMOTE_PEER',
+        peer: {
+          id: remotePeerId,
+          connection: call,
+          stream: remoteStream,
+        },
+      });
+      
+      peersRef.current.set(remotePeerId, call);
+      
+      toast({
+        title: "Peer Connected!",
+        description: "You're now connected to another user.",
+      });
+    });
+
+    call.on('close', () => {
+      console.log('Call closed with:', remotePeerId);
+      dispatch({ type: 'REMOVE_REMOTE_PEER', peerId: remotePeerId });
+      peersRef.current.delete(remotePeerId);
+      toast({
+        title: "Peer Disconnected",
+        description: "A user left the room.",
+      });
+    });
+
+    call.on('error', (err) => {
+      console.error('Call error with', remotePeerId, ':', err);
+      dispatch({ type: 'REMOVE_REMOTE_PEER', peerId: remotePeerId });
+      peersRef.current.delete(remotePeerId);
+      toast({
+        title: "Connection Error",
+        description: "Failed to connect to peer. They may have network restrictions.",
+        variant: "destructive",
+      });
+    });
+    
+    // Monitor connection state
+    call.peerConnection.oniceconnectionstatechange = () => {
+      const state = call.peerConnection.iceConnectionState;
+      console.log(`ICE connection state with ${remotePeerId}:`, state);
+    };
+    
+    call.peerConnection.onconnectionstatechange = () => {
+      const state = call.peerConnection.connectionState;
+      console.log(`Connection state with ${remotePeerId}:`, state);
+    };
+  }, [toast]);
+
   // Initialize PeerJS and handle connections
   useEffect(() => {
     if (!state.localStream) return;
+    
+    // Don't create a new peer if one already exists
+    if (peerRef.current && !peerRef.current.destroyed) {
+      console.log('Peer already exists, skipping initialization');
+      return;
+    }
 
     // Generate unique peer ID
     const myPeerId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -188,7 +282,7 @@ export function useMilan(roomId: string) {
             credential: 'w1uxM55V9yVoqyVFjt+mxDBV0F87AUCemaYVQGxsPLw=',
           },
         ],
-        iceTransportPolicy: 'relay', // Force TURN relay for testing (change to 'all' for production)
+        iceTransportPolicy: 'all', // Use all connection types (STUN + TURN)
         iceCandidatePoolSize: 10,
         bundlePolicy: 'max-bundle',
         rtcpMuxPolicy: 'require',
@@ -307,158 +401,14 @@ export function useMilan(roomId: string) {
     peerRef.current = peer;
 
     return () => {
-      peer.destroy();
-    };
-  }, [state.localStream, roomId, toast]);
-
-  // Helper function to call a peer
-  const callPeer = (peer: Peer, remotePeerId: string, stream: MediaStream) => {
-    if (peersRef.current.has(remotePeerId)) {
-      console.log('Already connected to:', remotePeerId);
-      return;
-    }
-
-    console.log('Calling peer:', remotePeerId);
-    console.log('Calling with stream:', stream.getTracks().map(t => `${t.kind}: ${t.enabled}`));
-    
-    // Verify we have a valid stream
-    if (!stream || stream.getTracks().length === 0) {
-      console.error('Cannot call peer: invalid stream');
-      toast({
-        title: "Connection Error",
-        description: "Cannot connect: No media stream available.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    const call = peer.call(remotePeerId, stream);
-
-    call.on('stream', (remoteStream) => {
-      console.log('Received stream from:', remotePeerId);
-      console.log('Remote stream tracks:', remoteStream.getTracks().map(t => `${t.kind}: ${t.enabled}`));
-      
-      // Verify stream has tracks
-      if (remoteStream.getTracks().length === 0) {
-        console.error('Remote stream has no tracks!');
-        toast({
-          title: "Connection Issue",
-          description: "Received empty stream from peer. They may need to allow camera/mic access.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      dispatch({
-        type: 'ADD_REMOTE_PEER',
-        peer: {
-          id: remotePeerId,
-          connection: call,
-          stream: remoteStream,
-        },
-      });
-      
-      peersRef.current.set(remotePeerId, call);
-      
-      toast({
-        title: "Peer Connected!",
-        description: "You're now connected to another user.",
-      });
-    });
-
-    call.on('close', () => {
-      console.log('Call closed with:', remotePeerId);
-      dispatch({ type: 'REMOVE_REMOTE_PEER', peerId: remotePeerId });
-      peersRef.current.delete(remotePeerId);
-      toast({
-        title: "Peer Disconnected",
-        description: "A user left the room.",
-      });
-    });
-
-    call.on('error', (err) => {
-      console.error('Call error with', remotePeerId, ':', err);
-      dispatch({ type: 'REMOVE_REMOTE_PEER', peerId: remotePeerId });
-      peersRef.current.delete(remotePeerId);
-      toast({
-        title: "Connection Error",
-        description: "Failed to connect to peer. They may have network restrictions.",
-        variant: "destructive",
-      });
-    });
-    
-    // Monitor connection state with restart capability
-    let iceRestartAttempts = 0;
-    const maxIceRestartAttempts = 3;
-    
-    call.peerConnection.oniceconnectionstatechange = () => {
-      const state = call.peerConnection.iceConnectionState;
-      console.log(`ICE connection state with ${remotePeerId}:`, state);
-      
-      if (state === 'failed' || state === 'disconnected') {
-        if (iceRestartAttempts < maxIceRestartAttempts) {
-          iceRestartAttempts++;
-          console.log(`ICE connection ${state}, attempting restart ${iceRestartAttempts}/${maxIceRestartAttempts}...`);
-          
-          setTimeout(() => {
-            try {
-              call.peerConnection.restartIce();
-            } catch (err) {
-              console.error('ICE restart failed:', err);
-            }
-          }, 1000 * iceRestartAttempts); // Exponential backoff
-        } else {
-          console.error('ICE connection failed after max restart attempts');
-          toast({
-            title: "Connection Lost",
-            description: "Unable to maintain connection with peer. They may have network restrictions.",
-            variant: "destructive",
-          });
-        }
-      } else if (state === 'connected' || state === 'completed') {
-        console.log('✅ ICE connection established successfully!');
-        iceRestartAttempts = 0; // Reset counter on success
-        toast({
-          title: "Connection Stable",
-          description: "Video connection established successfully.",
-        });
+      // Only destroy if this is the current peer
+      if (peerRef.current === peer && !peer.destroyed) {
+        console.log('Cleaning up peer connection');
+        peer.destroy();
+        peerRef.current = null;
       }
     };
-    
-    // Monitor signaling state
-    call.peerConnection.onsignalingstatechange = () => {
-      console.log(`Signaling state with ${remotePeerId}:`, call.peerConnection.signalingState);
-    };
-    
-    // Monitor connection state
-    call.peerConnection.onconnectionstatechange = () => {
-      const state = call.peerConnection.connectionState;
-      console.log(`Connection state with ${remotePeerId}:`, state);
-      
-      if (state === 'failed') {
-        console.error('Peer connection failed completely');
-      }
-    };
-    
-    // Log ICE candidates with more detail
-    call.peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log('ICE candidate:', {
-          type: event.candidate.type,
-          protocol: event.candidate.protocol,
-          address: event.candidate.address,
-          port: event.candidate.port,
-        });
-      } else {
-        console.log('ICE gathering complete');
-      }
-    };
-    
-    // Log ICE gathering state
-    call.peerConnection.onicegatheringstatechange = () => {
-      console.log(`ICE gathering state with ${remotePeerId}:`, call.peerConnection.iceGatheringState);
-    };
-  };
+  }, [state.localStream, roomId, toast, callPeer]);
 
   // Register with room using our Next.js API
   const registerWithRoom = async (peer: Peer, roomId: string, myPeerId: string) => {
