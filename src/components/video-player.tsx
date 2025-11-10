@@ -12,7 +12,7 @@ interface VideoPlayerProps {
 
 export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [hasVideo, setHasVideo] = useState(false);
+  const [hasVideo, setHasVideo] = useState(true); // Start with true, assume video exists
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,6 +20,7 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
     if (!video || !stream) {
       console.error('VideoPlayer: Missing video element or stream');
       setError('No stream available');
+      setHasVideo(false);
       return;
     }
 
@@ -33,69 +34,80 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
       }))
     });
 
-    // Set stream and ensure video element is ready
+    // Set stream directly
     video.srcObject = stream;
-    video.load(); // Force reload
     
-    // Check if video track exists and is enabled
+    // Check if video track exists
     const videoTrack = stream.getVideoTracks()[0];
-    const hasVideoTrack = videoTrack && videoTrack.enabled && videoTrack.readyState === 'live';
-    setHasVideo(hasVideoTrack);
-    setError(null);
+    if (videoTrack) {
+      setHasVideo(videoTrack.enabled);
+      setError(null);
+    } else {
+      setHasVideo(false);
+      console.warn(`No video track for ${name}`);
+    }
 
     // Handle video metadata loaded
     const handleLoadedMetadata = () => {
-      console.log(`Video metadata loaded for ${name}`);
+      console.log(`✅ Video metadata loaded for ${name}`);
+      setHasVideo(true);
       video.play().catch(err => {
         console.error('Error playing video:', err);
-        setError('Failed to play video');
       });
     };
 
     // Handle video can play
     const handleCanPlay = () => {
-      console.log(`Video can play for ${name}`);
-      const vTrack = stream.getVideoTracks()[0];
-      setHasVideo(vTrack && vTrack.enabled && vTrack.readyState === 'live');
+      console.log(`✅ Video can play for ${name}`);
+      setHasVideo(true);
+    };
+
+    // Handle video playing
+    const handlePlaying = () => {
+      console.log(`✅ Video is playing for ${name}`);
+      setHasVideo(true);
+      setError(null);
     };
 
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('playing', handlePlaying);
 
-    // Try to play immediately
-    const playTimeout = setTimeout(() => {
-      video.play().catch(err => {
-        console.error('Error playing video:', err);
-        // Try again after a short delay
-        setTimeout(() => {
-          video.play().catch(e => {
-            console.error('Retry failed:', e);
-            setError('Failed to play video');
-          });
-        }, 500);
-      });
-    }, 100);
+    // Play video
+    video.play().catch(err => {
+      console.error('Error playing video:', err);
+      // Retry
+      setTimeout(() => {
+        video.play().catch(e => console.error('Retry failed:', e));
+      }, 500);
+    });
 
     // Listen for track changes
     const handleTrackEnabled = () => {
       const vTrack = stream.getVideoTracks()[0];
-      setHasVideo(vTrack && vTrack.enabled && vTrack.readyState === 'live');
+      if (vTrack) {
+        setHasVideo(vTrack.enabled);
+      }
     };
 
     stream.getTracks().forEach(track => {
-      track.addEventListener('enabled', handleTrackEnabled);
-      track.addEventListener('mute', handleTrackEnabled);
-      track.addEventListener('unmute', handleTrackEnabled);
+      if (track.kind === 'video') {
+        track.addEventListener('enabled', handleTrackEnabled);
+        track.addEventListener('mute', handleTrackEnabled);
+        track.addEventListener('unmute', handleTrackEnabled);
+      }
     });
 
     return () => {
-      clearTimeout(playTimeout);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('playing', handlePlaying);
       stream.getTracks().forEach(track => {
-        track.removeEventListener('enabled', handleTrackEnabled);
-        track.removeEventListener('mute', handleTrackEnabled);
-        track.removeEventListener('unmute', handleTrackEnabled);
+        if (track.kind === 'video') {
+          track.removeEventListener('enabled', handleTrackEnabled);
+          track.removeEventListener('mute', handleTrackEnabled);
+          track.removeEventListener('unmute', handleTrackEnabled);
+        }
       });
     };
   }, [stream, name]);
@@ -118,13 +130,11 @@ export function VideoPlayer({ stream, name, isMuted }: VideoPlayerProps) {
           {error}
         </div>
       )}
-      {!hasVideo && (
+      {!hasVideo && stream.getVideoTracks().length === 0 && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white z-[5]">
           <User className="h-16 w-16" />
           <p className="mt-2 text-lg font-semibold">{name}</p>
-          <p className="text-sm text-muted-foreground">
-            {stream.getVideoTracks().length === 0 ? 'No video track' : 'Camera is off'}
-          </p>
+          <p className="text-sm text-muted-foreground">No video track</p>
         </div>
       )}
     </Card>
