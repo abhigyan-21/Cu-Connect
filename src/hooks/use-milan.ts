@@ -147,8 +147,31 @@ export function useMilan(roomId: string) {
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
           { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' },
           { urls: 'stun:global.stun.twilio.com:3478' },
-          // Twilio TURN (free for testing)
+          // Metered TURN servers (primary - more reliable)
+          {
+            urls: 'turn:a.relay.metered.ca:80',
+            username: 'e46a735f4c26d71c3e6e9f1f',
+            credential: 'tEgvhMDLK8F8BCAK',
+          },
+          {
+            urls: 'turn:a.relay.metered.ca:80?transport=tcp',
+            username: 'e46a735f4c26d71c3e6e9f1f',
+            credential: 'tEgvhMDLK8F8BCAK',
+          },
+          {
+            urls: 'turn:a.relay.metered.ca:443',
+            username: 'e46a735f4c26d71c3e6e9f1f',
+            credential: 'tEgvhMDLK8F8BCAK',
+          },
+          {
+            urls: 'turn:a.relay.metered.ca:443?transport=tcp',
+            username: 'e46a735f4c26d71c3e6e9f1f',
+            credential: 'tEgvhMDLK8F8BCAK',
+          },
+          // Twilio TURN as backup
           {
             urls: 'turn:global.turn.twilio.com:3478?transport=udp',
             username: 'f4b4035eaa76f4a55de5f4351567653ee4ff6fa97b50b6b334fcc1be9c27212d',
@@ -164,19 +187,8 @@ export function useMilan(roomId: string) {
             username: 'f4b4035eaa76f4a55de5f4351567653ee4ff6fa97b50b6b334fcc1be9c27212d',
             credential: 'w1uxM55V9yVoqyVFjt+mxDBV0F87AUCemaYVQGxsPLw=',
           },
-          // Metered TURN servers as backup
-          {
-            urls: 'turn:a.relay.metered.ca:80',
-            username: 'e46a735f4c26d71c3e6e9f1f',
-            credential: 'tEgvhMDLK8F8BCAK',
-          },
-          {
-            urls: 'turn:a.relay.metered.ca:443',
-            username: 'e46a735f4c26d71c3e6e9f1f',
-            credential: 'tEgvhMDLK8F8BCAK',
-          },
         ],
-        iceTransportPolicy: 'all',
+        iceTransportPolicy: 'all', // Try all connection types
         iceCandidatePoolSize: 10,
         bundlePolicy: 'max-bundle',
         rtcpMuxPolicy: 'require',
@@ -376,23 +388,75 @@ export function useMilan(roomId: string) {
     });
     
     // Monitor connection state with restart capability
+    let iceRestartAttempts = 0;
+    const maxIceRestartAttempts = 3;
+    
     call.peerConnection.oniceconnectionstatechange = () => {
       const state = call.peerConnection.iceConnectionState;
       console.log(`ICE connection state with ${remotePeerId}:`, state);
       
-      if (state === 'failed') {
-        console.error('ICE connection failed, attempting restart...');
-        call.peerConnection.restartIce();
+      if (state === 'failed' || state === 'disconnected') {
+        if (iceRestartAttempts < maxIceRestartAttempts) {
+          iceRestartAttempts++;
+          console.log(`ICE connection ${state}, attempting restart ${iceRestartAttempts}/${maxIceRestartAttempts}...`);
+          
+          setTimeout(() => {
+            try {
+              call.peerConnection.restartIce();
+            } catch (err) {
+              console.error('ICE restart failed:', err);
+            }
+          }, 1000 * iceRestartAttempts); // Exponential backoff
+        } else {
+          console.error('ICE connection failed after max restart attempts');
+          toast({
+            title: "Connection Lost",
+            description: "Unable to maintain connection with peer. They may have network restrictions.",
+            variant: "destructive",
+          });
+        }
       } else if (state === 'connected' || state === 'completed') {
         console.log('✅ ICE connection established successfully!');
+        iceRestartAttempts = 0; // Reset counter on success
+        toast({
+          title: "Connection Stable",
+          description: "Video connection established successfully.",
+        });
       }
     };
     
-    // Log ICE candidates
+    // Monitor signaling state
+    call.peerConnection.onsignalingstatechange = () => {
+      console.log(`Signaling state with ${remotePeerId}:`, call.peerConnection.signalingState);
+    };
+    
+    // Monitor connection state
+    call.peerConnection.onconnectionstatechange = () => {
+      const state = call.peerConnection.connectionState;
+      console.log(`Connection state with ${remotePeerId}:`, state);
+      
+      if (state === 'failed') {
+        console.error('Peer connection failed completely');
+      }
+    };
+    
+    // Log ICE candidates with more detail
     call.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log('ICE candidate:', event.candidate.type, event.candidate.protocol);
+        console.log('ICE candidate:', {
+          type: event.candidate.type,
+          protocol: event.candidate.protocol,
+          address: event.candidate.address,
+          port: event.candidate.port,
+        });
+      } else {
+        console.log('ICE gathering complete');
       }
+    };
+    
+    // Log ICE gathering state
+    call.peerConnection.onicegatheringstatechange = () => {
+      console.log(`ICE gathering state with ${remotePeerId}:`, call.peerConnection.iceGatheringState);
     };
   };
 
